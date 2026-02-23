@@ -1,0 +1,195 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "k8s/**"
+      - "terraform/**"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment to deploy"
+        type: choice
+        options: [staging, production]
+        default: staging
+
+env:
+  AWS_REGION: eu-central-1
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # STAGING
+  # ---------------------------------------------------------------------------
+  terraform-staging:
+    name: "Terraform (staging)"
+    runs-on: ubuntu-latest
+    environment: staging
+    outputs:
+      cluster_name: ${{ steps.tf.outputs.cluster_name }}
+      aws_region: ${{ steps.tf.outputs.aws_region }}
+      vpc_id: ${{ steps.tf.outputs.vpc_id }}
+      lb_controller_role_arn: ${{ steps.tf.outputs.lb_controller_role_arn }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform Init & Apply
+        working-directory: terraform
+        run: |
+          terraform init
+          terraform workspace select staging || terraform workspace new staging
+          terraform apply -auto-approve -var-file=envs/staging.tfvars
+
+      - name: Export outputs
+        id: tf
+        working-directory: terraform
+        run: |
+          echo "cluster_name=$(terraform output -raw cluster_name)" >> "$GITHUB_OUTPUT"
+          echo "aws_region=$(terraform output -raw aws_region)" >> "$GITHUB_OUTPUT"
+          echo "vpc_id=$(terraform output -raw vpc_id)" >> "$GITHUB_OUTPUT"
+          echo "lb_controller_role_arn=$(terraform output -raw aws_lb_controller_role_arn)" >> "$GITHUB_OUTPUT"
+
+  deploy-staging:
+    name: "Deploy (staging)"
+    needs: terraform-staging
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ needs.terraform-staging.outputs.aws_region }} \
+            --name ${{ needs.terraform-staging.outputs.cluster_name }}
+
+      - name: Install AWS Load Balancer Controller
+        run: |
+          helm repo add eks https://aws.github.io/eks-charts
+          helm repo update eks
+          helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-controller \
+            --namespace kube-system \
+            --values k8s/aws-load-balancer-controller/values.yaml \
+            --set clusterName=${{ needs.terraform-staging.outputs.cluster_name }} \
+            --set region=${{ needs.terraform-staging.outputs.aws_region }} \
+            --set vpcId=${{ needs.terraform-staging.outputs.vpc_id }} \
+            --set "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn=${{ needs.terraform-staging.outputs.lb_controller_role_arn }}" \
+            --wait
+
+      - name: Deploy apps
+        run: kubectl apply -f k8s/test-app/
+
+      - name: Wait for ALB
+        run: |
+          for i in $(seq 1 30); do
+            ALB=$(kubectl get ingress test-app -n default -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
+            if [ -n "$ALB" ]; then
+              echo "::notice::ALB endpoint (staging): http://${ALB}"
+              break
+            fi
+            sleep 10
+          done
+
+  # ---------------------------------------------------------------------------
+  # PRODUCTION — requires manual approval in GitHub environment settings
+  # ---------------------------------------------------------------------------
+  terraform-production:
+    name: "Terraform (production)"
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    environment: production
+    outputs:
+      cluster_name: ${{ steps.tf.outputs.cluster_name }}
+      aws_region: ${{ steps.tf.outputs.aws_region }}
+      vpc_id: ${{ steps.tf.outputs.vpc_id }}
+      lb_controller_role_arn: ${{ steps.tf.outputs.lb_controller_role_arn }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform Init & Apply
+        working-directory: terraform
+        run: |
+          terraform init
+          terraform workspace select production || terraform workspace new production
+          terraform apply -auto-approve -var-file=envs/production.tfvars
+
+      - name: Export outputs
+        id: tf
+        working-directory: terraform
+        run: |
+          echo "cluster_name=$(terraform output -raw cluster_name)" >> "$GITHUB_OUTPUT"
+          echo "aws_region=$(terraform output -raw aws_region)" >> "$GITHUB_OUTPUT"
+          echo "vpc_id=$(terraform output -raw vpc_id)" >> "$GITHUB_OUTPUT"
+          echo "lb_controller_role_arn=$(terraform output -raw aws_lb_controller_role_arn)" >> "$GITHUB_OUTPUT"
+
+  deploy-production:
+    name: "Deploy (production)"
+    needs: terraform-production
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ needs.terraform-production.outputs.aws_region }} \
+            --name ${{ needs.terraform-production.outputs.cluster_name }}
+
+      - name: Install AWS Load Balancer Controller
+        run: |
+          helm repo add eks https://aws.github.io/eks-charts
+          helm repo update eks
+          helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-controller \
+            --namespace kube-system \
+            --values k8s/aws-load-balancer-controller/values.yaml \
+            --set clusterName=${{ needs.terraform-production.outputs.cluster_name }} \
+            --set region=${{ needs.terraform-production.outputs.aws_region }} \
+            --set vpcId=${{ needs.terraform-production.outputs.vpc_id }} \
+            --set "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn=${{ needs.terraform-production.outputs.lb_controller_role_arn }}" \
+            --wait
+
+      - name: Deploy apps
+        run: kubectl apply -f k8s/test-app/
+
+      - name: Wait for ALB
+        run: |
+          for i in $(seq 1 30); do
+            ALB=$(kubectl get ingress test-app -n default -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
+            if [ -n "$ALB" ]; then
+              echo "::notice::ALB endpoint (production): http://${ALB}"
+              break
+            fi
+            sleep 10
+          done
