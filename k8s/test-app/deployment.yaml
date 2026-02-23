@@ -19,7 +19,7 @@ spec:
         - name: nginx
           image: nginxdemos/hello:plain-text
           ports:
-            - containerPort: 8080
+            - containerPort: 80
           resources:
             requests:
               cpu: 10m
@@ -29,6 +29,6 @@ spec:
           readinessProbe:
             httpGet:
               path: /
-              port: 8080
+              port: 80
             initialDelaySeconds: 2
             periodSeconds: 5
