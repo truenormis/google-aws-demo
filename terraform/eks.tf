@@ -1,3 +1,7 @@
+# -----------------------------------------------------------------------------
+# KMS
+# -----------------------------------------------------------------------------
+
 resource "aws_kms_key" "eks" {
   description             = "${local.cluster_name} EKS secret encryption key"
   deletion_window_in_days = 7
@@ -12,6 +16,10 @@ resource "aws_kms_alias" "eks" {
   name          = "alias/${local.cluster_name}-eks"
   target_key_id = aws_kms_key.eks.key_id
 }
+
+# -----------------------------------------------------------------------------
+# EKS Cluster IAM Role
+# -----------------------------------------------------------------------------
 
 resource "aws_iam_role" "eks_cluster" {
   name = "${local.cluster_name}-eks-cluster-role"
@@ -37,6 +45,10 @@ resource "aws_iam_role_policy_attachment" "eks_vpc_resource_controller" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKSVPCResourceController"
   role       = aws_iam_role.eks_cluster.name
 }
+
+# -----------------------------------------------------------------------------
+# EKS Cluster
+# -----------------------------------------------------------------------------
 
 resource "aws_eks_cluster" "main" {
   name     = local.cluster_name
@@ -90,41 +102,13 @@ resource "aws_iam_openid_connect_provider" "eks" {
   }
 }
 
-resource "aws_eks_addon" "vpc_cni" {
-  cluster_name                = aws_eks_cluster.main.name
-  addon_name                  = "vpc-cni"
-  resolve_conflicts_on_create = "OVERWRITE"
-  resolve_conflicts_on_update = "PRESERVE"
-
-  depends_on = [aws_eks_node_group.main]
-}
-
-resource "aws_eks_addon" "coredns" {
-  cluster_name                = aws_eks_cluster.main.name
-  addon_name                  = "coredns"
-  resolve_conflicts_on_create = "OVERWRITE"
-  resolve_conflicts_on_update = "PRESERVE"
-
-  depends_on = [aws_eks_node_group.main]
-}
-
-resource "aws_eks_addon" "kube_proxy" {
-  cluster_name                = aws_eks_cluster.main.name
-  addon_name                  = "kube-proxy"
-  resolve_conflicts_on_create = "OVERWRITE"
-  resolve_conflicts_on_update = "PRESERVE"
-
-  depends_on = [aws_eks_node_group.main]
-}
-
 resource "aws_eks_addon" "pod_identity_agent" {
   cluster_name                = aws_eks_cluster.main.name
   addon_name                  = "eks-pod-identity-agent"
   resolve_conflicts_on_create = "OVERWRITE"
   resolve_conflicts_on_update = "PRESERVE"
-
-  depends_on = [aws_eks_node_group.main]
 }
+
 
 resource "aws_iam_role" "vpc_cni" {
   name = "${local.cluster_name}-vpc-cni-role"
@@ -157,6 +141,10 @@ resource "aws_eks_pod_identity_association" "vpc_cni" {
 
   depends_on = [aws_eks_addon.pod_identity_agent]
 }
+
+# -----------------------------------------------------------------------------
+# Step 3: Node Group — после Pod Identity, чтобы ноды сразу получили credentials
+# -----------------------------------------------------------------------------
 
 resource "aws_iam_role" "eks_nodes" {
   name = "${local.cluster_name}-eks-node-role"
@@ -199,7 +187,7 @@ resource "aws_launch_template" "eks_nodes" {
   metadata_options {
     http_endpoint               = "enabled"
     http_tokens                 = "required"
-    http_put_response_hop_limit = 1
+    http_put_response_hop_limit = 2
   }
 
   tag_specifications {
@@ -245,9 +233,41 @@ resource "aws_eks_node_group" "main" {
   depends_on = [
     aws_iam_role_policy_attachment.eks_worker_node_policy,
     aws_iam_role_policy_attachment.eks_container_registry,
+    aws_eks_pod_identity_association.vpc_cni,
   ]
 
   tags = {
     Name = "${local.cluster_name}-node"
   }
+}
+
+# -----------------------------------------------------------------------------
+# Step 4: Addons — после нод
+# -----------------------------------------------------------------------------
+
+resource "aws_eks_addon" "vpc_cni" {
+  cluster_name                = aws_eks_cluster.main.name
+  addon_name                  = "vpc-cni"
+  resolve_conflicts_on_create = "OVERWRITE"
+  resolve_conflicts_on_update = "PRESERVE"
+
+  depends_on = [aws_eks_node_group.main]
+}
+
+resource "aws_eks_addon" "coredns" {
+  cluster_name                = aws_eks_cluster.main.name
+  addon_name                  = "coredns"
+  resolve_conflicts_on_create = "OVERWRITE"
+  resolve_conflicts_on_update = "PRESERVE"
+
+  depends_on = [aws_eks_node_group.main]
+}
+
+resource "aws_eks_addon" "kube_proxy" {
+  cluster_name                = aws_eks_cluster.main.name
+  addon_name                  = "kube-proxy"
+  resolve_conflicts_on_create = "OVERWRITE"
+  resolve_conflicts_on_update = "PRESERVE"
+
+  depends_on = [aws_eks_node_group.main]
 }
