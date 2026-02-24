@@ -161,6 +161,7 @@ jobs:
             --values k8s/test-app/values.yaml \
             --set "frontend.image.repository=${{ needs.terraform-staging.outputs.ecr_repository_url }}" \
             --set "frontend.image.tag=${{ needs.build-frontend.outputs.image_tag }}" \
+            --set "frontend.appEnv=staging" \
             --set "ingress.annotations.alb\\.ingress\\.kubernetes\\.io/certificate-arn=${{ needs.terraform-staging.outputs.acm_certificate_arn }}" \
             --set "ingress.hosts[0].host=staging.shop.whiteforge.ai" \
             --wait --timeout 5m
@@ -277,6 +278,7 @@ jobs:
             --values k8s/test-app/values.yaml \
             --set "frontend.image.repository=${{ needs.terraform-production.outputs.ecr_repository_url }}" \
             --set "frontend.image.tag=${{ needs.build-frontend.outputs.image_tag }}" \
+            --set "frontend.appEnv=production" \
             --set "ingress.annotations.alb\\.ingress\\.kubernetes\\.io/certificate-arn=${{ needs.terraform-production.outputs.acm_certificate_arn }}" \
             --set "ingress.hosts[0].host=shop.whiteforge.ai" \
             --wait --timeout 5m
