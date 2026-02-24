@@ -98,13 +98,34 @@ resource "aws_cloudfront_distribution" "main" {
   depends_on = [aws_acm_certificate_validation.cloudfront]
 }
 
+# One-time cleanup: delete old DNS record created by ExternalDNS for the main domain.
+# The provisioner runs only on resource creation, so subsequent applies are unaffected.
+resource "terraform_data" "cleanup_old_cloudfront_dns" {
+  provisioner "local-exec" {
+    command = <<-EOT
+      RECORDS=$(curl -s "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?name=$DOMAIN" \
+        -H "Authorization: Bearer $CF_TOKEN" | jq -r '.result[].id // empty')
+      for id in $RECORDS; do
+        echo "Deleting old DNS record $id for $DOMAIN"
+        curl -s -X DELETE "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records/$id" \
+          -H "Authorization: Bearer $CF_TOKEN"
+      done
+    EOT
+    environment = {
+      CF_TOKEN = var.cloudflare_api_token
+      ZONE_ID  = var.cloudflare_zone_id
+      DOMAIN   = local.cloudfront_domain
+    }
+  }
+}
+
 # DNS: point main domain to CloudFront
 resource "cloudflare_record" "cloudfront" {
-  zone_id         = var.cloudflare_zone_id
-  name            = local.cloudfront_domain
-  type            = "CNAME"
-  content         = aws_cloudfront_distribution.main.domain_name
-  proxied         = false
-  ttl             = 300
-  allow_overwrite = true
+  depends_on = [terraform_data.cleanup_old_cloudfront_dns]
+  zone_id    = var.cloudflare_zone_id
+  name       = local.cloudfront_domain
+  type       = "CNAME"
+  content    = aws_cloudfront_distribution.main.domain_name
+  proxied    = false
+  ttl        = 300
 }
