@@ -47,7 +47,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(otel_calls_total{span_kind=\"SPAN_KIND_SERVER\", service_name=~\"$service_name\", span_name!~\".*TraceService/Export.*\"}[5m]))",
+          "expr": "sum(rate(otel_calls_total{span_kind=\"SPAN_KIND_SERVER\", service_name=~\"$service_name\", span_name!~\".*TraceService/Export.*|.*Health/Check.*\"}[5m]))",
           "legendFormat": ""
         }
       ],
@@ -81,7 +81,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.95, sum(rate(otel_duration_milliseconds_bucket{span_kind=\"SPAN_KIND_SERVER\", service_name=~\"$service_name\", span_name!~\".*TraceService/Export.*\"}[5m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(otel_duration_milliseconds_bucket{span_kind=\"SPAN_KIND_SERVER\", service_name=~\"$service_name\", span_name!~\".*TraceService/Export.*|.*Health/Check.*\"}[5m])) by (le))",
           "legendFormat": ""
         }
       ],
@@ -115,7 +115,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "(sum(rate(otel_calls_total{span_kind=\"SPAN_KIND_SERVER\", service_name=~\"$service_name\", status_code=\"STATUS_CODE_ERROR\", span_name!~\".*TraceService/Export.*\"}[5m])) or vector(0)) / sum(rate(otel_calls_total{span_kind=\"SPAN_KIND_SERVER\", service_name=~\"$service_name\", span_name!~\".*TraceService/Export.*\"}[5m])) * 100",
+          "expr": "(sum(rate(otel_calls_total{span_kind=\"SPAN_KIND_SERVER\", service_name=~\"$service_name\", status_code=\"STATUS_CODE_ERROR\", span_name!~\".*TraceService/Export.*|.*Health/Check.*\"}[5m])) or vector(0)) / sum(rate(otel_calls_total{span_kind=\"SPAN_KIND_SERVER\", service_name=~\"$service_name\", span_name!~\".*TraceService/Export.*|.*Health/Check.*\"}[5m])) * 100",
           "legendFormat": ""
         }
       ],
@@ -149,7 +149,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "count(count by (service_name) (rate(otel_calls_total{span_kind=\"SPAN_KIND_SERVER\", span_name!~\".*TraceService/Export.*\"}[5m]) > 0))",
+          "expr": "count(count by (service_name) (rate(otel_calls_total{span_kind=\"SPAN_KIND_SERVER\", span_name!~\".*TraceService/Export.*|.*Health/Check.*\"}[5m]) > 0))",
           "legendFormat": ""
         }
       ],
@@ -189,7 +189,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(otel_calls_total{span_kind=\"SPAN_KIND_SERVER\", service_name=~\"$service_name\", span_name!~\".*TraceService/Export.*\"}[5m])) by (service_name)",
+          "expr": "sum(rate(otel_calls_total{span_kind=\"SPAN_KIND_SERVER\", service_name=~\"$service_name\", span_name!~\".*TraceService/Export.*|.*Health/Check.*\"}[5m])) by (service_name)",
           "legendFormat": "{{service_name}}"
         }
       ],
@@ -224,22 +224,22 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.50, sum(rate(otel_duration_milliseconds_bucket{span_kind=\"SPAN_KIND_SERVER\", service_name=~\"$service_name\", span_name!~\".*TraceService/Export.*\"}[5m])) by (le))",
+          "expr": "histogram_quantile(0.50, sum(rate(otel_duration_milliseconds_bucket{span_kind=\"SPAN_KIND_SERVER\", service_name=~\"$service_name\", span_name!~\".*TraceService/Export.*|.*Health/Check.*\"}[5m])) by (le))",
           "legendFormat": "p50"
         },
         {
           "refId": "B",
-          "expr": "histogram_quantile(0.90, sum(rate(otel_duration_milliseconds_bucket{span_kind=\"SPAN_KIND_SERVER\", service_name=~\"$service_name\", span_name!~\".*TraceService/Export.*\"}[5m])) by (le))",
+          "expr": "histogram_quantile(0.90, sum(rate(otel_duration_milliseconds_bucket{span_kind=\"SPAN_KIND_SERVER\", service_name=~\"$service_name\", span_name!~\".*TraceService/Export.*|.*Health/Check.*\"}[5m])) by (le))",
           "legendFormat": "p90"
         },
         {
           "refId": "C",
-          "expr": "histogram_quantile(0.95, sum(rate(otel_duration_milliseconds_bucket{span_kind=\"SPAN_KIND_SERVER\", service_name=~\"$service_name\", span_name!~\".*TraceService/Export.*\"}[5m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(otel_duration_milliseconds_bucket{span_kind=\"SPAN_KIND_SERVER\", service_name=~\"$service_name\", span_name!~\".*TraceService/Export.*|.*Health/Check.*\"}[5m])) by (le))",
           "legendFormat": "p95"
         },
         {
           "refId": "D",
-          "expr": "histogram_quantile(0.99, sum(rate(otel_duration_milliseconds_bucket{span_kind=\"SPAN_KIND_SERVER\", service_name=~\"$service_name\", span_name!~\".*TraceService/Export.*\"}[5m])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(otel_duration_milliseconds_bucket{span_kind=\"SPAN_KIND_SERVER\", service_name=~\"$service_name\", span_name!~\".*TraceService/Export.*|.*Health/Check.*\"}[5m])) by (le))",
           "legendFormat": "p99"
         }
       ],
@@ -288,7 +288,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(otel_calls_total{span_kind=\"SPAN_KIND_SERVER\", service_name=~\"$service_name\", status_code=\"STATUS_CODE_ERROR\", span_name!~\".*TraceService/Export.*\"}[5m])) by (service_name)",
+          "expr": "sum(rate(otel_calls_total{span_kind=\"SPAN_KIND_SERVER\", service_name=~\"$service_name\", status_code=\"STATUS_CODE_ERROR\", span_name!~\".*TraceService/Export.*|.*Health/Check.*\"}[5m])) by (service_name)",
           "legendFormat": "{{service_name}}"
         }
       ],
@@ -321,7 +321,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "(sum(rate(otel_calls_total{span_kind=\"SPAN_KIND_SERVER\", service_name=~\"$service_name\", status_code=\"STATUS_CODE_ERROR\", span_name!~\".*TraceService/Export.*\"}[5m])) by (service_name, span_name) or vector(0)) / sum(rate(otel_calls_total{span_kind=\"SPAN_KIND_SERVER\", service_name=~\"$service_name\", span_name!~\".*TraceService/Export.*\"}[5m])) by (service_name, span_name) * 100",
+          "expr": "(sum(rate(otel_calls_total{span_kind=\"SPAN_KIND_SERVER\", service_name=~\"$service_name\", status_code=\"STATUS_CODE_ERROR\", span_name!~\".*TraceService/Export.*|.*Health/Check.*\"}[5m])) by (service_name, span_name) or vector(0)) / sum(rate(otel_calls_total{span_kind=\"SPAN_KIND_SERVER\", service_name=~\"$service_name\", span_name!~\".*TraceService/Export.*|.*Health/Check.*\"}[5m])) by (service_name, span_name) * 100",
           "legendFormat": "",
           "format": "table",
           "instant": true
@@ -393,8 +393,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(otel_calls_total{span_kind=\"SPAN_KIND_CLIENT\", service_name=~\"$service_name\", span_name!~\".*TraceService/Export.*\"}[5m])) by (span_name)",
-          "legendFormat": "{{span_name}}"
+          "expr": "sum(rate(otel_calls_total{span_kind=\"SPAN_KIND_SERVER\", service_name=~\"$service_name\", span_name!~\".*TraceService/Export.*|.*Health/Check.*\"}[5m])) by (service_name)",
+          "legendFormat": "{{service_name}}"
         }
       ],
       "fieldConfig": {
@@ -428,8 +428,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.95, sum(rate(otel_duration_milliseconds_bucket{span_kind=\"SPAN_KIND_CLIENT\", service_name=~\"$service_name\", span_name!~\".*TraceService/Export.*\"}[5m])) by (le, span_name))",
-          "legendFormat": "{{span_name}}"
+          "expr": "histogram_quantile(0.95, sum(rate(otel_duration_milliseconds_bucket{span_kind=\"SPAN_KIND_SERVER\", service_name=~\"$service_name\", span_name!~\".*TraceService/Export.*|.*Health/Check.*\"}[5m])) by (le, service_name))",
+          "legendFormat": "{{service_name}}"
         }
       ],
       "fieldConfig": {
@@ -469,7 +469,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "topk(10, sum(rate(otel_calls_total{span_kind=\"SPAN_KIND_SERVER\", service_name=~\"$service_name\", span_name!~\".*TraceService/Export.*\"}[5m])) by (service_name, span_name))",
+          "expr": "topk(10, sum(rate(otel_calls_total{span_kind=\"SPAN_KIND_SERVER\", service_name=~\"$service_name\", span_name!~\".*TraceService/Export.*|.*Health/Check.*\"}[5m])) by (service_name, span_name))",
           "legendFormat": "{{service_name}} — {{span_name}}",
           "instant": true
         }
@@ -504,7 +504,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "topk(10, histogram_quantile(0.95, sum(rate(otel_duration_milliseconds_bucket{span_kind=\"SPAN_KIND_SERVER\", service_name=~\"$service_name\", span_name!~\".*TraceService/Export.*\"}[5m])) by (le, service_name, span_name)))",
+          "expr": "topk(10, histogram_quantile(0.95, sum(rate(otel_duration_milliseconds_bucket{span_kind=\"SPAN_KIND_SERVER\", service_name=~\"$service_name\", span_name!~\".*TraceService/Export.*|.*Health/Check.*\"}[5m])) by (le, service_name, span_name)))",
           "legendFormat": "{{service_name}} — {{span_name}}",
           "instant": true
         }
@@ -546,7 +546,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "otelcol_process_uptime_total{job=\"otel-collector-self\"}",
+          "expr": "otelcol_process_uptime_total{job=\"otelcol-contrib\"}",
           "legendFormat": ""
         }
       ],
@@ -578,7 +578,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "otelcol_process_memory_rss{job=\"otel-collector-self\"}",
+          "expr": "otelcol_process_memory_rss{job=\"otelcol-contrib\"}",
           "legendFormat": "RSS"
         }
       ],
@@ -608,12 +608,12 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(otelcol_receiver_accepted_spans_total{job=\"otel-collector-self\"}[5m]))",
+          "expr": "sum(rate(otelcol_receiver_accepted_spans_total{job=\"otelcol-contrib\"}[5m]))",
           "legendFormat": "Received"
         },
         {
           "refId": "B",
-          "expr": "sum(rate(otelcol_exporter_sent_spans_total{job=\"otel-collector-self\"}[5m]))",
+          "expr": "sum(rate(otelcol_exporter_sent_spans_total{job=\"otelcol-contrib\"}[5m]))",
           "legendFormat": "Exported"
         }
       ],
@@ -659,7 +659,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(otelcol_exporter_queue_size{job=\"otel-collector-self\"}) / clamp_min(sum(otelcol_exporter_queue_capacity{job=\"otel-collector-self\"}), 1)",
+          "expr": "sum(otelcol_exporter_queue_size{job=\"otelcol-contrib\"}) / clamp_min(sum(otelcol_exporter_queue_capacity{job=\"otelcol-contrib\"}), 1)",
           "legendFormat": "Queue Usage"
         }
       ],
@@ -694,12 +694,12 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(otelcol_exporter_send_failed_spans_total{job=\"otel-collector-self\"}[5m]))",
+          "expr": "sum(rate(otelcol_exporter_send_failed_spans_total{job=\"otelcol-contrib\"}[5m]))",
           "legendFormat": "Failed Spans"
         },
         {
           "refId": "B",
-          "expr": "sum(rate(otelcol_exporter_send_failed_metric_points_total{job=\"otel-collector-self\"}[5m]))",
+          "expr": "sum(rate(otelcol_exporter_send_failed_metric_points_total{job=\"otelcol-contrib\"}[5m]))",
           "legendFormat": "Failed Metrics"
         }
       ],
