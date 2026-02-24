@@ -105,3 +105,11 @@ variable "domain_name" {
   type        = string
   default     = "shop.whiteforge.ai"
 }
+
+# Monitoring
+variable "grafana_admin_password" {
+  description = "Admin password for Grafana"
+  type        = string
+  sensitive   = true
+  default     = "warhammer40k"
+}

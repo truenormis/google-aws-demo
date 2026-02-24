@@ -1,0 +1,73 @@
+# Grafana
+grafana:
+  adminUser: admin
+  adminPassword: "${grafana_admin_password}"
+
+  additionalDataSources:
+    - name: Jaeger
+      type: jaeger
+      access: proxy
+      url: http://jaeger.monitoring.svc.cluster.local:16686
+      isDefault: false
+
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: monitoring
+
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+        - name: Prometheus
+          type: prometheus
+          uid: PBFA97CFB590B2093
+          url: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090
+          access: proxy
+          isDefault: true
+
+# Prometheus
+prometheus:
+  prometheusSpec:
+    retention: 7d
+
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+
+    additionalScrapeConfigs:
+      - job_name: otel-collector-metrics
+        scrape_interval: 10s
+        static_configs:
+          - targets:
+              - opentelemetrycollector.default.svc.cluster.local:8889
+        metrics_path: /metrics
+
+      - job_name: otel-collector-self-metrics
+        scrape_interval: 10s
+        static_configs:
+          - targets:
+              - opentelemetrycollector.default.svc.cluster.local:8888
+        metrics_path: /metrics
+
+# Disable components not accessible on EKS
+alertmanager:
+  enabled: false
+
+kubeEtcd:
+  enabled: false
+
+kubeControllerManager:
+  enabled: false
+
+kubeScheduler:
+  enabled: false
+
+kubeProxy:
+  enabled: false

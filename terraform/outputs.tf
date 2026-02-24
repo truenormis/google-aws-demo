@@ -68,3 +68,8 @@ output "ecr_repository_url" {
   description = "ECR repository URL"
   value       = aws_ecr_repository.app.repository_url
 }
+
+output "grafana_port_forward_command" {
+  description = "Command to access Grafana dashboard via port-forward"
+  value       = "kubectl port-forward -n monitoring svc/kube-prometheus-stack-grafana 3000:80"
+}
