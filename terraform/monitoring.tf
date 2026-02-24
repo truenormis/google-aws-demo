@@ -104,6 +104,7 @@ resource "aws_grafana_workspace_service_account_token" "ci_cd" {
   workspace_id       = aws_grafana_workspace.main.id
   service_account_id = aws_grafana_workspace_service_account.ci_cd.service_account_id
   name               = "ci-cd-token"
+  seconds_to_live    = 2592000  # 30 days (maximum)
 }
 
 # --- IRSA for OTEL Collector ---
