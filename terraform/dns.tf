@@ -15,14 +15,14 @@ resource "cloudflare_record" "acm_validation" {
     for dvo in aws_acm_certificate.main.domain_validation_options : dvo.domain_name => {
       name  = dvo.resource_record_name
       type  = dvo.resource_record_type
-      value = dvo.resource_record_value
+      content = dvo.resource_record_value
     }
   }
 
   zone_id = var.cloudflare_zone_id
   name    = each.value.name
   type    = each.value.type
-  value   = trimsuffix(each.value.value, ".")
+  content = trimsuffix(each.value.content, ".")
   proxied = false
   ttl     = 60
 }
