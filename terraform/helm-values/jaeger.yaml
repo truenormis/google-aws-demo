@@ -1,7 +1,0 @@
-jaeger:
-  image:
-    repository: jaegertracing/jaeger
-    tag: "2.4.0"
-
-storage:
-  type: memory

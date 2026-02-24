@@ -69,7 +69,17 @@ output "ecr_repository_url" {
   value       = aws_ecr_repository.app.repository_url
 }
 
-output "grafana_port_forward_command" {
-  description = "Command to access Grafana dashboard via port-forward"
-  value       = "kubectl port-forward -n monitoring svc/kube-prometheus-stack-grafana 3000:80"
+output "amp_workspace_endpoint" {
+  description = "Amazon Managed Prometheus remote write endpoint"
+  value       = aws_prometheus_workspace.main.prometheus_endpoint
+}
+
+output "grafana_workspace_endpoint" {
+  description = "AWS Managed Grafana workspace URL"
+  value       = aws_grafana_workspace.main.endpoint
+}
+
+output "otel_collector_role_arn" {
+  description = "IAM role ARN for OTEL Collector (IRSA)"
+  value       = aws_iam_role.otel_collector.arn
 }

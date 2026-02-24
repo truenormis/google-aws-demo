@@ -19,12 +19,15 @@ kind: ServiceAccount
 metadata:
   name: {{ .Values.opentelemetryCollector.name }}
   namespace: {{.Release.Namespace}}
-  {{- if not .Values.serviceAccounts.annotationsOnlyForCartservice }}
-  {{- with .Values.serviceAccounts.annotations }}
   annotations:
+    {{- if .Values.opentelemetryCollector.irsaRoleArn }}
+    eks.amazonaws.com/role-arn: {{ .Values.opentelemetryCollector.irsaRoleArn | quote }}
+    {{- end }}
+    {{- if not .Values.serviceAccounts.annotationsOnlyForCartservice }}
+    {{- with .Values.serviceAccounts.annotations }}
     {{- toYaml . | nindent 4 }}
-  {{- end }}
-  {{- end }}
+    {{- end }}
+    {{- end }}
 ---
 {{- end }}
 apiVersion: v1
@@ -42,15 +45,23 @@ data:
           http:
             endpoint: 0.0.0.0:4318
 
+    extensions:
+      sigv4auth:
+        region: {{ .Values.opentelemetryCollector.awsRegion | quote }}
+        service: "aps"
+      sigv4auth/xray:
+        region: {{ .Values.opentelemetryCollector.awsRegion | quote }}
+        service: "xray"
+
     exporters:
-      otlp/jaeger:
-        endpoint: {{ .Values.opentelemetryCollector.jaegerEndpoint | quote }}
-        tls:
-          insecure: true
-      prometheus:
-        endpoint: 0.0.0.0:8889
+      prometheusremotewrite:
+        endpoint: {{ .Values.opentelemetryCollector.ampEndpoint | quote }}
+        auth:
+          authenticator: sigv4auth
         resource_to_telemetry_conversion:
           enabled: true
+      awsxray:
+        region: {{ .Values.opentelemetryCollector.awsRegion | quote }}
       debug:
         verbosity: basic
 
@@ -58,15 +69,16 @@ data:
       spanmetrics:
 
     service:
+      extensions: [sigv4auth, sigv4auth/xray]
       pipelines:
         traces:
           receivers: [otlp]
           processors: []
-          exporters: [otlp/jaeger, spanmetrics, debug]
+          exporters: [awsxray, spanmetrics, debug]
         metrics:
           receivers: [otlp, spanmetrics]
           processors: []
-          exporters: [prometheus]
+          exporters: [prometheusremotewrite, debug]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -134,10 +146,6 @@ spec:
     port: 4318
     protocol: TCP
     targetPort: 4318
-  - name: prometheus-metrics
-    port: 8889
-    protocol: TCP
-    targetPort: 8889
   - name: self-metrics
     port: 8888
     protocol: TCP

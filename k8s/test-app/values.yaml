@@ -44,7 +44,10 @@ authorizationPolicies:
 opentelemetryCollector:
   create: true
   name: opentelemetrycollector
-  jaegerEndpoint: "jaeger.monitoring.svc.cluster.local:4317"
+  jaegerEndpoint: ""
+  ampEndpoint: ""
+  awsRegion: "eu-central-1"
+  irsaRoleArn: ""
 
 googleCloudOperations:
   profiler: false
