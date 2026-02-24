@@ -70,7 +70,11 @@ spec:
                 - ALL
             privileged: false
             readOnlyRootFilesystem: true
+          {{- if .Values.frontend.image.repository }}
+          image: {{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag | default "latest" }}
+          {{- else }}
           image: {{ .Values.images.repository }}/{{ .Values.frontend.name }}:{{ .Values.images.tag | default .Chart.AppVersion }}
+          {{- end }}
           ports:
           - containerPort: 8080
           readinessProbe:
@@ -110,13 +114,22 @@ spec:
             value: "{{ .Values.shoppingAssistantService.name }}:80"
           - name: ENV_PLATFORM
             value: {{ .Values.frontend.platform | quote }}
+          {{- if .Values.frontend.appEnv }}
+          - name: APP_ENV
+            value: {{ .Values.frontend.appEnv | quote }}
+          {{- end }}
           {{- if .Values.opentelemetryCollector.create }}
           - name: COLLECTOR_SERVICE_ADDR
             value: "{{ .Values.opentelemetryCollector.name }}:4317"
           - name: OTEL_SERVICE_NAME
             value: "{{ .Values.frontend.name }}"
+          {{- else if .Values.frontend.collectorServiceAddr }}
+          - name: COLLECTOR_SERVICE_ADDR
+            value: {{ .Values.frontend.collectorServiceAddr | quote }}
+          - name: OTEL_SERVICE_NAME
+            value: "{{ .Values.frontend.name }}"
           {{- end }}
-          {{- if .Values.googleCloudOperations.tracing }}
+          {{- if or .Values.googleCloudOperations.tracing .Values.frontend.enableTracing }}
           - name: ENABLE_TRACING
             value: "1"
           {{- end }}

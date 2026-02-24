@@ -117,11 +117,18 @@ emailService:
 frontend:
   create: true
   name: frontend
+  # Custom image for frontend (built and pushed to ECR). If set, overrides the default images.repository.
+  image:
+    repository: ""
+    tag: "latest"
   externalService: false
   cymbalBranding: false
   # One of: local, gcp, aws, azure, onprem, alibaba. When not set, defaults to "local" unless running in GKE, otherwise auto-sets to gcp.
   platform: aws
   singleSharedSession: false
+  appEnv: "production"
+  enableTracing: true
+  collectorServiceAddr: "opentelemetrycollector:4317"
   virtualService:
     create: false
     hosts:

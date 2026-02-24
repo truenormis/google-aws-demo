@@ -6,6 +6,7 @@ on:
     paths:
       - "k8s/**"
       - "terraform/**"
+      - "src/frontend/**"
       - ".github/workflows/deploy.yml"
   workflow_dispatch:
     inputs:
@@ -36,6 +37,7 @@ jobs:
       vpc_id: ${{ steps.tf.outputs.vpc_id }}
       lb_controller_role_arn: ${{ steps.tf.outputs.lb_controller_role_arn }}
       acm_certificate_arn: ${{ steps.tf.outputs.acm_certificate_arn }}
+      ecr_repository_url: ${{ steps.tf.outputs.ecr_repository_url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -67,10 +69,49 @@ jobs:
           echo "vpc_id=$(terraform output -raw vpc_id)" >> "$GITHUB_OUTPUT"
           echo "lb_controller_role_arn=$(terraform output -raw aws_lb_controller_role_arn)" >> "$GITHUB_OUTPUT"
           echo "acm_certificate_arn=$(terraform output -raw acm_certificate_arn)" >> "$GITHUB_OUTPUT"
+          echo "ecr_repository_url=$(terraform output -raw ecr_repository_url)" >> "$GITHUB_OUTPUT"
+
+  build-frontend:
+    name: "Build & Push Frontend"
+    needs: terraform-staging
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.meta.outputs.image_tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Image metadata
+        id: meta
+        run: |
+          echo "image_tag=${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./src/frontend
+          file: ./src/frontend/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ needs.terraform-staging.outputs.ecr_repository_url }}:${{ steps.meta.outputs.image_tag }}
+            ${{ needs.terraform-staging.outputs.ecr_repository_url }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   deploy-staging:
     name: "Deploy (staging)"
-    needs: terraform-staging
+    needs: [terraform-staging, build-frontend]
     runs-on: ubuntu-latest
     environment: staging
     steps:
@@ -118,6 +159,8 @@ jobs:
           helm upgrade --install test-app ./k8s/test-app \
             --namespace default \
             --values k8s/test-app/values.yaml \
+            --set "frontend.image.repository=${{ needs.terraform-staging.outputs.ecr_repository_url }}" \
+            --set "frontend.image.tag=${{ needs.build-frontend.outputs.image_tag }}" \
             --set "ingress.annotations.alb\\.ingress\\.kubernetes\\.io/certificate-arn=${{ needs.terraform-staging.outputs.acm_certificate_arn }}" \
             --set "ingress.hosts[0].host=staging.shop.whiteforge.ai" \
             --wait --timeout 5m
@@ -148,6 +191,7 @@ jobs:
       vpc_id: ${{ steps.tf.outputs.vpc_id }}
       lb_controller_role_arn: ${{ steps.tf.outputs.lb_controller_role_arn }}
       acm_certificate_arn: ${{ steps.tf.outputs.acm_certificate_arn }}
+      ecr_repository_url: ${{ steps.tf.outputs.ecr_repository_url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -179,10 +223,11 @@ jobs:
           echo "vpc_id=$(terraform output -raw vpc_id)" >> "$GITHUB_OUTPUT"
           echo "lb_controller_role_arn=$(terraform output -raw aws_lb_controller_role_arn)" >> "$GITHUB_OUTPUT"
           echo "acm_certificate_arn=$(terraform output -raw acm_certificate_arn)" >> "$GITHUB_OUTPUT"
+          echo "ecr_repository_url=$(terraform output -raw ecr_repository_url)" >> "$GITHUB_OUTPUT"
 
   deploy-production:
     name: "Deploy (production)"
-    needs: terraform-production
+    needs: [terraform-production, build-frontend]
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -230,6 +275,8 @@ jobs:
           helm upgrade --install test-app ./k8s/test-app \
             --namespace default \
             --values k8s/test-app/values.yaml \
+            --set "frontend.image.repository=${{ needs.terraform-production.outputs.ecr_repository_url }}" \
+            --set "frontend.image.tag=${{ needs.build-frontend.outputs.image_tag }}" \
             --set "ingress.annotations.alb\\.ingress\\.kubernetes\\.io/certificate-arn=${{ needs.terraform-production.outputs.acm_certificate_arn }}" \
             --set "ingress.hosts[0].host=shop.whiteforge.ai" \
             --wait --timeout 5m

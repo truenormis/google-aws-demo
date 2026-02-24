@@ -13,6 +13,15 @@
 # limitations under the License.
 
 {{- if .Values.currencyService.create }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.currencyService.name }}-config
+  namespace: {{ .Release.Namespace }}
+data:
+  currency_conversion.json: |
+    {{- .Files.Get "currency_data/currency_conversion.json" | nindent 4 }}
+---
 {{- if .Values.serviceAccounts.create }}
 apiVersion: v1
 kind: ServiceAccount
@@ -96,8 +105,17 @@ spec:
         livenessProbe:
           grpc:
             port: 7000
+        volumeMounts:
+        - name: currency-config
+          mountPath: /usr/src/app/data/currency_conversion.json
+          subPath: currency_conversion.json
+          readOnly: true
         resources:
           {{- toYaml .Values.currencyService.resources | nindent 10 }}
+      volumes:
+      - name: currency-config
+        configMap:
+          name: {{ .Values.currencyService.name }}-config
 ---
 apiVersion: v1
 kind: Service
