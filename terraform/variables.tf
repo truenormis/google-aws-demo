@@ -105,3 +105,9 @@ variable "domain_name" {
   type        = string
   default     = "shop.whiteforge.ai"
 }
+
+variable "cloudfront_price_class" {
+  description = "CloudFront distribution price class"
+  type        = string
+  default     = "PriceClass_100"
+}

@@ -89,3 +89,18 @@ output "grafana_api_token" {
   value       = aws_grafana_workspace_service_account_token.ci_cd.key
   sensitive   = true
 }
+
+output "cloudfront_distribution_id" {
+  description = "CloudFront distribution ID"
+  value       = aws_cloudfront_distribution.main.id
+}
+
+output "cloudfront_domain_name" {
+  description = "CloudFront distribution domain name"
+  value       = aws_cloudfront_distribution.main.domain_name
+}
+
+output "origin_acm_certificate_arn" {
+  description = "ACM certificate ARN for origin subdomains (used by ALB)"
+  value       = aws_acm_certificate_validation.origin.certificate_arn
+}

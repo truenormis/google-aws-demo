@@ -37,6 +37,7 @@ jobs:
       vpc_id: ${{ steps.tf.outputs.vpc_id }}
       lb_controller_role_arn: ${{ steps.tf.outputs.lb_controller_role_arn }}
       acm_certificate_arn: ${{ steps.tf.outputs.acm_certificate_arn }}
+      origin_acm_certificate_arn: ${{ steps.tf.outputs.origin_acm_certificate_arn }}
       ecr_repository_url: ${{ steps.tf.outputs.ecr_repository_url }}
       amp_endpoint: ${{ steps.tf.outputs.amp_endpoint }}
       otel_collector_role_arn: ${{ steps.tf.outputs.otel_collector_role_arn }}
@@ -74,6 +75,7 @@ jobs:
           echo "vpc_id=$(terraform output -raw vpc_id)" >> "$GITHUB_OUTPUT"
           echo "lb_controller_role_arn=$(terraform output -raw aws_lb_controller_role_arn)" >> "$GITHUB_OUTPUT"
           echo "acm_certificate_arn=$(terraform output -raw acm_certificate_arn)" >> "$GITHUB_OUTPUT"
+          echo "origin_acm_certificate_arn=$(terraform output -raw origin_acm_certificate_arn)" >> "$GITHUB_OUTPUT"
           echo "ecr_repository_url=$(terraform output -raw ecr_repository_url)" >> "$GITHUB_OUTPUT"
           echo "amp_endpoint=$(terraform output -raw amp_workspace_endpoint)" >> "$GITHUB_OUTPUT"
           echo "otel_collector_role_arn=$(terraform output -raw otel_collector_role_arn)" >> "$GITHUB_OUTPUT"
@@ -174,8 +176,8 @@ jobs:
             --set "frontend.image.repository=${{ needs.terraform-staging.outputs.ecr_repository_url }}" \
             --set "frontend.image.tag=${{ needs.build-frontend.outputs.image_tag }}" \
             --set "frontend.appEnv=staging" \
-            --set "ingress.annotations.alb\\.ingress\\.kubernetes\\.io/certificate-arn=${{ needs.terraform-staging.outputs.acm_certificate_arn }}" \
-            --set "ingress.hosts[0].host=staging.shop.whiteforge.ai" \
+            --set "ingress.annotations.alb\\.ingress\\.kubernetes\\.io/certificate-arn=${{ needs.terraform-staging.outputs.origin_acm_certificate_arn }}" \
+            --set "ingress.hosts[0].host=origin-staging.shop.whiteforge.ai" \
             --set "opentelemetryCollector.ampEndpoint=${AMP_ENDPOINT}api/v1/remote_write" \
             --set "opentelemetryCollector.awsRegion=${{ env.AWS_REGION }}" \
             --set "opentelemetryCollector.irsaRoleArn=${OTEL_ROLE_ARN}" \
@@ -187,7 +189,7 @@ jobs:
             ALB=$(kubectl get ingress frontend -n default -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
             if [ -n "$ALB" ]; then
               echo "::notice::ALB endpoint (staging): https://${ALB}"
-              echo "::notice::ExternalDNS will create CNAME: staging.shop.whiteforge.ai -> ${ALB}"
+              echo "::notice::ExternalDNS will create CNAME: origin-staging.shop.whiteforge.ai -> ${ALB}"
               break
             fi
             sleep 10
@@ -285,6 +287,7 @@ jobs:
       vpc_id: ${{ steps.tf.outputs.vpc_id }}
       lb_controller_role_arn: ${{ steps.tf.outputs.lb_controller_role_arn }}
       acm_certificate_arn: ${{ steps.tf.outputs.acm_certificate_arn }}
+      origin_acm_certificate_arn: ${{ steps.tf.outputs.origin_acm_certificate_arn }}
       ecr_repository_url: ${{ steps.tf.outputs.ecr_repository_url }}
       amp_endpoint: ${{ steps.tf.outputs.amp_endpoint }}
       otel_collector_role_arn: ${{ steps.tf.outputs.otel_collector_role_arn }}
@@ -322,6 +325,7 @@ jobs:
           echo "vpc_id=$(terraform output -raw vpc_id)" >> "$GITHUB_OUTPUT"
           echo "lb_controller_role_arn=$(terraform output -raw aws_lb_controller_role_arn)" >> "$GITHUB_OUTPUT"
           echo "acm_certificate_arn=$(terraform output -raw acm_certificate_arn)" >> "$GITHUB_OUTPUT"
+          echo "origin_acm_certificate_arn=$(terraform output -raw origin_acm_certificate_arn)" >> "$GITHUB_OUTPUT"
           echo "ecr_repository_url=$(terraform output -raw ecr_repository_url)" >> "$GITHUB_OUTPUT"
           echo "amp_endpoint=$(terraform output -raw amp_workspace_endpoint)" >> "$GITHUB_OUTPUT"
           echo "otel_collector_role_arn=$(terraform output -raw otel_collector_role_arn)" >> "$GITHUB_OUTPUT"
@@ -384,8 +388,8 @@ jobs:
             --set "frontend.image.repository=${{ needs.terraform-production.outputs.ecr_repository_url }}" \
             --set "frontend.image.tag=${{ needs.build-frontend.outputs.image_tag }}" \
             --set "frontend.appEnv=production" \
-            --set "ingress.annotations.alb\\.ingress\\.kubernetes\\.io/certificate-arn=${{ needs.terraform-production.outputs.acm_certificate_arn }}" \
-            --set "ingress.hosts[0].host=shop.whiteforge.ai" \
+            --set "ingress.annotations.alb\\.ingress\\.kubernetes\\.io/certificate-arn=${{ needs.terraform-production.outputs.origin_acm_certificate_arn }}" \
+            --set "ingress.hosts[0].host=origin.shop.whiteforge.ai" \
             --set "opentelemetryCollector.ampEndpoint=${AMP_ENDPOINT}api/v1/remote_write" \
             --set "opentelemetryCollector.awsRegion=${{ env.AWS_REGION }}" \
             --set "opentelemetryCollector.irsaRoleArn=${OTEL_ROLE_ARN}" \
@@ -397,7 +401,7 @@ jobs:
             ALB=$(kubectl get ingress frontend -n default -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
             if [ -n "$ALB" ]; then
               echo "::notice::ALB endpoint (production): https://${ALB}"
-              echo "::notice::ExternalDNS will create CNAME: shop.whiteforge.ai -> ${ALB}"
+              echo "::notice::ExternalDNS will create CNAME: origin.shop.whiteforge.ai -> ${ALB}"
               break
             fi
             sleep 10

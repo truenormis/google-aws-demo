@@ -157,7 +157,7 @@ func main() {
 	r.HandleFunc(baseUrl+"/logout", svc.logoutHandler).Methods(http.MethodGet)
 	r.HandleFunc(baseUrl+"/cart/checkout", svc.placeOrderHandler).Methods(http.MethodPost)
 	r.HandleFunc(baseUrl+"/assistant", svc.assistantHandler).Methods(http.MethodGet)
-	r.PathPrefix(baseUrl + "/static/").Handler(http.StripPrefix(baseUrl+"/static/", http.FileServer(http.Dir("./static/"))))
+	r.PathPrefix(baseUrl + "/static/").Handler(http.StripPrefix(baseUrl+"/static/", staticCacheControl(http.FileServer(http.Dir("./static/")))))
 	r.HandleFunc(baseUrl+"/robots.txt", func(w http.ResponseWriter, _ *http.Request) { fmt.Fprint(w, "User-agent: *\nDisallow: /") })
 	r.HandleFunc(baseUrl+"/_healthz", func(w http.ResponseWriter, _ *http.Request) { fmt.Fprint(w, "ok") })
 	r.HandleFunc(baseUrl+"/product-meta/{ids}", svc.getProductByID).Methods(http.MethodGet)
@@ -213,6 +213,13 @@ func initProfiling(log logrus.FieldLogger, service, version string) {
 		time.Sleep(d)
 	}
 	log.Warn("warning: could not initialize Stackdriver profiler after retrying, giving up")
+}
+
+func staticCacheControl(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+		next.ServeHTTP(w, r)
+	})
 }
 
 func mustMapEnv(target *string, envKey string) {

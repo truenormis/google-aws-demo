@@ -240,7 +240,7 @@ ingress:
     alb.ingress.kubernetes.io/certificate-arn: ""
     alb.ingress.kubernetes.io/healthcheck-path: /_healthz
   hosts:
-    - host: shop.whiteforge.ai
+    - host: origin.shop.whiteforge.ai
       paths:
         - path: /
           pathType: Prefix
