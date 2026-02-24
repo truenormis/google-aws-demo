@@ -200,36 +200,60 @@ jobs:
           AMP_ENDPOINT: ${{ needs.terraform-staging.outputs.amp_endpoint }}
           AWS_REGION_VAL: ${{ env.AWS_REGION }}
         run: |
-          # Create/update AMP datasource
-          curl -sf -X POST "${GRAFANA_URL}/api/datasources" \
-            -H "Authorization: Bearer ${GRAFANA_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -d '{
-              "name": "Amazon Managed Prometheus",
-              "type": "prometheus",
-              "url": "'"${AMP_ENDPOINT}"'",
-              "access": "proxy",
-              "isDefault": true,
-              "jsonData": {
-                "httpMethod": "POST",
-                "sigV4Auth": true,
-                "sigV4AuthType": "default",
-                "sigV4Region": "'"${AWS_REGION_VAL}"'"
-              }
-            }' || echo "Datasource may already exist"
+          # Helper: create or update datasource by name
+          upsert_datasource() {
+            local payload="$1"
+            local ds_name
+            ds_name=$(echo "$payload" | jq -r '.name')
+            local encoded_name
+            encoded_name=$(printf '%s' "$ds_name" | jq -sRr @uri)
 
-          # Create/update X-Ray datasource
-          curl -sf -X POST "${GRAFANA_URL}/api/datasources" \
-            -H "Authorization: Bearer ${GRAFANA_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -d '{
-              "name": "AWS X-Ray",
-              "type": "grafana-x-ray-datasource",
-              "access": "proxy",
-              "jsonData": {
-                "defaultRegion": "'"${AWS_REGION_VAL}"'"
-              }
-            }' || echo "Datasource may already exist"
+            # Check if datasource already exists
+            local existing
+            existing=$(curl -sf "${GRAFANA_URL}/api/datasources/name/${encoded_name}" \
+              -H "Authorization: Bearer ${GRAFANA_TOKEN}" 2>/dev/null) || true
+
+            if echo "$existing" | jq -e '.id' >/dev/null 2>&1; then
+              local ds_id
+              ds_id=$(echo "$existing" | jq -r '.id')
+              echo "Updating datasource '${ds_name}' (id=${ds_id})"
+              curl -sf -X PUT "${GRAFANA_URL}/api/datasources/${ds_id}" \
+                -H "Authorization: Bearer ${GRAFANA_TOKEN}" \
+                -H "Content-Type: application/json" \
+                -d "$payload"
+            else
+              echo "Creating datasource '${ds_name}'"
+              curl -sf -X POST "${GRAFANA_URL}/api/datasources" \
+                -H "Authorization: Bearer ${GRAFANA_TOKEN}" \
+                -H "Content-Type: application/json" \
+                -d "$payload"
+            fi
+          }
+
+          # AMP datasource
+          upsert_datasource '{
+            "name": "Amazon Managed Prometheus",
+            "type": "prometheus",
+            "url": "'"${AMP_ENDPOINT}"'",
+            "access": "proxy",
+            "isDefault": true,
+            "jsonData": {
+              "httpMethod": "POST",
+              "sigV4Auth": true,
+              "sigV4AuthType": "default",
+              "sigV4Region": "'"${AWS_REGION_VAL}"'"
+            }
+          }'
+
+          # X-Ray datasource
+          upsert_datasource '{
+            "name": "AWS X-Ray",
+            "type": "grafana-x-ray-datasource",
+            "access": "proxy",
+            "jsonData": {
+              "defaultRegion": "'"${AWS_REGION_VAL}"'"
+            }
+          }'
 
           # Get Prometheus datasource UID for dashboard variable substitution
           DS_UID=$(curl -sf "${GRAFANA_URL}/api/datasources/name/Amazon%20Managed%20Prometheus" \
@@ -386,36 +410,60 @@ jobs:
           AMP_ENDPOINT: ${{ needs.terraform-production.outputs.amp_endpoint }}
           AWS_REGION_VAL: ${{ env.AWS_REGION }}
         run: |
-          # Create/update AMP datasource
-          curl -sf -X POST "${GRAFANA_URL}/api/datasources" \
-            -H "Authorization: Bearer ${GRAFANA_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -d '{
-              "name": "Amazon Managed Prometheus",
-              "type": "prometheus",
-              "url": "'"${AMP_ENDPOINT}"'",
-              "access": "proxy",
-              "isDefault": true,
-              "jsonData": {
-                "httpMethod": "POST",
-                "sigV4Auth": true,
-                "sigV4AuthType": "default",
-                "sigV4Region": "'"${AWS_REGION_VAL}"'"
-              }
-            }' || echo "Datasource may already exist"
+          # Helper: create or update datasource by name
+          upsert_datasource() {
+            local payload="$1"
+            local ds_name
+            ds_name=$(echo "$payload" | jq -r '.name')
+            local encoded_name
+            encoded_name=$(printf '%s' "$ds_name" | jq -sRr @uri)
 
-          # Create/update X-Ray datasource
-          curl -sf -X POST "${GRAFANA_URL}/api/datasources" \
-            -H "Authorization: Bearer ${GRAFANA_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -d '{
-              "name": "AWS X-Ray",
-              "type": "grafana-x-ray-datasource",
-              "access": "proxy",
-              "jsonData": {
-                "defaultRegion": "'"${AWS_REGION_VAL}"'"
-              }
-            }' || echo "Datasource may already exist"
+            # Check if datasource already exists
+            local existing
+            existing=$(curl -sf "${GRAFANA_URL}/api/datasources/name/${encoded_name}" \
+              -H "Authorization: Bearer ${GRAFANA_TOKEN}" 2>/dev/null) || true
+
+            if echo "$existing" | jq -e '.id' >/dev/null 2>&1; then
+              local ds_id
+              ds_id=$(echo "$existing" | jq -r '.id')
+              echo "Updating datasource '${ds_name}' (id=${ds_id})"
+              curl -sf -X PUT "${GRAFANA_URL}/api/datasources/${ds_id}" \
+                -H "Authorization: Bearer ${GRAFANA_TOKEN}" \
+                -H "Content-Type: application/json" \
+                -d "$payload"
+            else
+              echo "Creating datasource '${ds_name}'"
+              curl -sf -X POST "${GRAFANA_URL}/api/datasources" \
+                -H "Authorization: Bearer ${GRAFANA_TOKEN}" \
+                -H "Content-Type: application/json" \
+                -d "$payload"
+            fi
+          }
+
+          # AMP datasource
+          upsert_datasource '{
+            "name": "Amazon Managed Prometheus",
+            "type": "prometheus",
+            "url": "'"${AMP_ENDPOINT}"'",
+            "access": "proxy",
+            "isDefault": true,
+            "jsonData": {
+              "httpMethod": "POST",
+              "sigV4Auth": true,
+              "sigV4AuthType": "default",
+              "sigV4Region": "'"${AWS_REGION_VAL}"'"
+            }
+          }'
+
+          # X-Ray datasource
+          upsert_datasource '{
+            "name": "AWS X-Ray",
+            "type": "grafana-x-ray-datasource",
+            "access": "proxy",
+            "jsonData": {
+              "defaultRegion": "'"${AWS_REGION_VAL}"'"
+            }
+          }'
 
           # Get Prometheus datasource UID for dashboard variable substitution
           DS_UID=$(curl -sf "${GRAFANA_URL}/api/datasources/name/Amazon%20Managed%20Prometheus" \
