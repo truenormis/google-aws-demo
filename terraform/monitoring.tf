@@ -84,7 +84,8 @@ resource "aws_grafana_workspace" "main" {
   name                     = "${local.cluster_name}-grafana"
 
   configuration = jsonencode({
-    plugins = { pluginAdminEnabled = true }
+    plugins          = { pluginAdminEnabled = true }
+    unifiedAlerting  = { enabled = false }
   })
 
   tags = {
