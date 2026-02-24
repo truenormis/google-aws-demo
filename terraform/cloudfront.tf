@@ -17,28 +17,13 @@ resource "aws_acm_certificate" "cloudfront" {
   }
 }
 
-resource "cloudflare_record" "cloudfront_acm_validation" {
-  for_each = {
-    for dvo in aws_acm_certificate.cloudfront.domain_validation_options : dvo.domain_name => {
-      name    = dvo.resource_record_name
-      type    = dvo.resource_record_type
-      content = dvo.resource_record_value
-    }
-  }
-
-  zone_id         = var.cloudflare_zone_id
-  name            = each.value.name
-  type            = each.value.type
-  content         = trimsuffix(each.value.content, ".")
-  proxied         = false
-  ttl             = 60
-  allow_overwrite = true
-}
-
+# Validation DNS records already exist via cloudflare_record.acm_validation (main cert
+# covers both shop.whiteforge.ai and staging.shop.whiteforge.ai). ACM validation
+# CNAMEs are identical per domain regardless of certificate or region, so we reuse them.
 resource "aws_acm_certificate_validation" "cloudfront" {
   provider                = aws.us_east_1
   certificate_arn         = aws_acm_certificate.cloudfront.arn
-  validation_record_fqdns = [for record in cloudflare_record.cloudfront_acm_validation : record.hostname]
+  validation_record_fqdns = [for record in cloudflare_record.acm_validation : record.hostname]
 }
 
 # Managed cache policies
