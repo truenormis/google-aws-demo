@@ -113,20 +113,19 @@ jobs:
             --values k8s/external-dns/values.yaml \
             --wait
 
-      - name: Deploy test-app
+      - name: Deploy app
         run: |
           helm upgrade --install test-app ./k8s/test-app \
             --namespace default \
             --values k8s/test-app/values.yaml \
-            --set replicaCount=2 \
             --set "ingress.annotations.alb\\.ingress\\.kubernetes\\.io/certificate-arn=${{ needs.terraform-staging.outputs.acm_certificate_arn }}" \
             --set "ingress.hosts[0].host=staging.shop.whiteforge.ai" \
-            --wait
+            --wait --timeout 5m
 
       - name: Wait for ALB
         run: |
           for i in $(seq 1 30); do
-            ALB=$(kubectl get ingress test-app -n default -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
+            ALB=$(kubectl get ingress frontend -n default -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
             if [ -n "$ALB" ]; then
               echo "::notice::ALB endpoint (staging): https://${ALB}"
               echo "::notice::ExternalDNS will create CNAME: staging.shop.whiteforge.ai -> ${ALB}"
@@ -226,20 +225,19 @@ jobs:
             --values k8s/external-dns/values.yaml \
             --wait
 
-      - name: Deploy test-app
+      - name: Deploy app
         run: |
           helm upgrade --install test-app ./k8s/test-app \
             --namespace default \
             --values k8s/test-app/values.yaml \
-            --set replicaCount=3 \
             --set "ingress.annotations.alb\\.ingress\\.kubernetes\\.io/certificate-arn=${{ needs.terraform-production.outputs.acm_certificate_arn }}" \
             --set "ingress.hosts[0].host=shop.whiteforge.ai" \
-            --wait
+            --wait --timeout 5m
 
       - name: Wait for ALB
         run: |
           for i in $(seq 1 30); do
-            ALB=$(kubectl get ingress test-app -n default -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
+            ALB=$(kubectl get ingress frontend -n default -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
             if [ -n "$ALB" ]; then
               echo "::notice::ALB endpoint (production): https://${ALB}"
               echo "::notice::ExternalDNS will create CNAME: shop.whiteforge.ai -> ${ALB}"

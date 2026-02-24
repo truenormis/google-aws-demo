@@ -2,7 +2,7 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "test-app.fullname" . }}
+  name: {{ .Values.frontend.name }}
   namespace: {{ .Release.Namespace }}
   {{- with .Values.ingress.annotations }}
   annotations:
@@ -24,9 +24,9 @@ spec:
             pathType: {{ .pathType }}
             backend:
               service:
-                name: {{ include "test-app.fullname" $ }}
+                name: {{ $.Values.frontend.name }}
                 port:
-                  number: {{ $.Values.service.port }}
+                  number: 80
           {{- end }}
     {{- end }}
 {{- end }}
