@@ -16,5 +16,4 @@ node_max_size                        = 5
 node_disk_size                       = 50
 node_capacity_type                   = "ON_DEMAND"
 
-domain_name        = "shop.whiteforge.ai"
-cloudflare_zone_id = ""  # set via TF_VAR_cloudflare_zone_id or CI/CD secret
+domain_name = "shop.whiteforge.ai"
