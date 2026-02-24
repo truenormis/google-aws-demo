@@ -15,3 +15,6 @@ node_min_size                        = 1
 node_max_size                        = 3
 node_disk_size                       = 30
 node_capacity_type                   = "ON_DEMAND"
+
+domain_name        = "shop.whiteforge.ai"
+cloudflare_zone_id = ""

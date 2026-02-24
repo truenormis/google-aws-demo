@@ -35,6 +35,7 @@ jobs:
       aws_region: ${{ steps.tf.outputs.aws_region }}
       vpc_id: ${{ steps.tf.outputs.vpc_id }}
       lb_controller_role_arn: ${{ steps.tf.outputs.lb_controller_role_arn }}
+      acm_certificate_arn: ${{ steps.tf.outputs.acm_certificate_arn }}
     steps:
       - uses: actions/checkout@v4
 
@@ -49,6 +50,9 @@ jobs:
 
       - name: Terraform Init & Apply
         working-directory: terraform
+        env:
+          TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          TF_VAR_cloudflare_zone_id: ${{ secrets.CLOUDFLARE_ZONE_ID }}
         run: |
           terraform init
           terraform workspace select staging || terraform workspace new staging
@@ -62,11 +66,13 @@ jobs:
           echo "aws_region=$(terraform output -raw aws_region)" >> "$GITHUB_OUTPUT"
           echo "vpc_id=$(terraform output -raw vpc_id)" >> "$GITHUB_OUTPUT"
           echo "lb_controller_role_arn=$(terraform output -raw aws_lb_controller_role_arn)" >> "$GITHUB_OUTPUT"
+          echo "acm_certificate_arn=$(terraform output -raw acm_certificate_arn)" >> "$GITHUB_OUTPUT"
 
   deploy-staging:
     name: "Deploy (staging)"
     needs: terraform-staging
     runs-on: ubuntu-latest
+    environment: staging
     steps:
       - uses: actions/checkout@v4
 
@@ -94,15 +100,36 @@ jobs:
             --set "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn=${{ needs.terraform-staging.outputs.lb_controller_role_arn }}" \
             --wait
 
-      - name: Deploy apps
-        run: kubectl apply -f k8s/test-app/
+      - name: Install ExternalDNS
+        run: |
+          kubectl create secret generic cloudflare-api-token \
+            --namespace kube-system \
+            --from-literal=api-token=${{ secrets.CLOUDFLARE_API_TOKEN }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+          helm repo add external-dns https://kubernetes-sigs.github.io/external-dns
+          helm repo update external-dns
+          helm upgrade --install external-dns external-dns/external-dns \
+            --namespace kube-system \
+            --values k8s/external-dns/values.yaml \
+            --wait
+
+      - name: Deploy test-app
+        run: |
+          helm upgrade --install test-app ./k8s/test-app \
+            --namespace default \
+            --values k8s/test-app/values.yaml \
+            --set replicaCount=2 \
+            --set "ingress.annotations.alb\\.ingress\\.kubernetes\\.io/certificate-arn=${{ needs.terraform-staging.outputs.acm_certificate_arn }}" \
+            --set "ingress.hosts[0].host=staging.shop.whiteforge.ai" \
+            --wait
 
       - name: Wait for ALB
         run: |
           for i in $(seq 1 30); do
             ALB=$(kubectl get ingress test-app -n default -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
             if [ -n "$ALB" ]; then
-              echo "::notice::ALB endpoint (staging): http://${ALB}"
+              echo "::notice::ALB endpoint (staging): https://${ALB}"
+              echo "::notice::ExternalDNS will create CNAME: staging.shop.whiteforge.ai -> ${ALB}"
               break
             fi
             sleep 10
@@ -121,6 +148,7 @@ jobs:
       aws_region: ${{ steps.tf.outputs.aws_region }}
       vpc_id: ${{ steps.tf.outputs.vpc_id }}
       lb_controller_role_arn: ${{ steps.tf.outputs.lb_controller_role_arn }}
+      acm_certificate_arn: ${{ steps.tf.outputs.acm_certificate_arn }}
     steps:
       - uses: actions/checkout@v4
 
@@ -135,6 +163,9 @@ jobs:
 
       - name: Terraform Init & Apply
         working-directory: terraform
+        env:
+          TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          TF_VAR_cloudflare_zone_id: ${{ secrets.CLOUDFLARE_ZONE_ID }}
         run: |
           terraform init
           terraform workspace select production || terraform workspace new production
@@ -148,11 +179,13 @@ jobs:
           echo "aws_region=$(terraform output -raw aws_region)" >> "$GITHUB_OUTPUT"
           echo "vpc_id=$(terraform output -raw vpc_id)" >> "$GITHUB_OUTPUT"
           echo "lb_controller_role_arn=$(terraform output -raw aws_lb_controller_role_arn)" >> "$GITHUB_OUTPUT"
+          echo "acm_certificate_arn=$(terraform output -raw acm_certificate_arn)" >> "$GITHUB_OUTPUT"
 
   deploy-production:
     name: "Deploy (production)"
     needs: terraform-production
     runs-on: ubuntu-latest
+    environment: production
     steps:
       - uses: actions/checkout@v4
 
@@ -180,15 +213,36 @@ jobs:
             --set "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn=${{ needs.terraform-production.outputs.lb_controller_role_arn }}" \
             --wait
 
-      - name: Deploy apps
-        run: kubectl apply -f k8s/test-app/
+      - name: Install ExternalDNS
+        run: |
+          kubectl create secret generic cloudflare-api-token \
+            --namespace kube-system \
+            --from-literal=api-token=${{ secrets.CLOUDFLARE_API_TOKEN }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+          helm repo add external-dns https://kubernetes-sigs.github.io/external-dns
+          helm repo update external-dns
+          helm upgrade --install external-dns external-dns/external-dns \
+            --namespace kube-system \
+            --values k8s/external-dns/values.yaml \
+            --wait
+
+      - name: Deploy test-app
+        run: |
+          helm upgrade --install test-app ./k8s/test-app \
+            --namespace default \
+            --values k8s/test-app/values.yaml \
+            --set replicaCount=3 \
+            --set "ingress.annotations.alb\\.ingress\\.kubernetes\\.io/certificate-arn=${{ needs.terraform-production.outputs.acm_certificate_arn }}" \
+            --set "ingress.hosts[0].host=shop.whiteforge.ai" \
+            --wait
 
       - name: Wait for ALB
         run: |
           for i in $(seq 1 30); do
             ALB=$(kubectl get ingress test-app -n default -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
             if [ -n "$ALB" ]; then
-              echo "::notice::ALB endpoint (production): http://${ALB}"
+              echo "::notice::ALB endpoint (production): https://${ALB}"
+              echo "::notice::ExternalDNS will create CNAME: shop.whiteforge.ai -> ${ALB}"
               break
             fi
             sleep 10

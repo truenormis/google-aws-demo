@@ -58,3 +58,8 @@ output "aws_region" {
   description = "AWS region"
   value       = var.aws_region
 }
+
+output "acm_certificate_arn" {
+  description = "ACM certificate ARN for the domain"
+  value       = aws_acm_certificate_validation.main.certificate_arn
+}

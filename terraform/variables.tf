@@ -87,3 +87,21 @@ variable "node_capacity_type" {
   type        = string
   default     = "ON_DEMAND"
 }
+
+# Cloudflare + DNS
+variable "cloudflare_api_token" {
+  description = "Cloudflare API token with DNS edit permission"
+  type        = string
+  sensitive   = true
+}
+
+variable "cloudflare_zone_id" {
+  description = "Cloudflare zone ID for the domain"
+  type        = string
+}
+
+variable "domain_name" {
+  description = "Primary domain name"
+  type        = string
+  default     = "shop.whiteforge.ai"
+}
