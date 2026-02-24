@@ -83,3 +83,9 @@ output "otel_collector_role_arn" {
   description = "IAM role ARN for OTEL Collector (IRSA)"
   value       = aws_iam_role.otel_collector.arn
 }
+
+output "grafana_api_token" {
+  description = "Grafana service account API token for CI/CD automation"
+  value       = aws_grafana_workspace_service_account_token.ci_cd.key
+  sensitive   = true
+}

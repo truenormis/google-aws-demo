@@ -41,6 +41,7 @@ jobs:
       amp_endpoint: ${{ steps.tf.outputs.amp_endpoint }}
       otel_collector_role_arn: ${{ steps.tf.outputs.otel_collector_role_arn }}
       grafana_endpoint: ${{ steps.tf.outputs.grafana_endpoint }}
+      grafana_api_token: ${{ steps.tf.outputs.grafana_api_token }}
     steps:
       - uses: actions/checkout@v4
 
@@ -77,6 +78,7 @@ jobs:
           echo "amp_endpoint=$(terraform output -raw amp_workspace_endpoint)" >> "$GITHUB_OUTPUT"
           echo "otel_collector_role_arn=$(terraform output -raw otel_collector_role_arn)" >> "$GITHUB_OUTPUT"
           echo "grafana_endpoint=$(terraform output -raw grafana_workspace_endpoint)" >> "$GITHUB_OUTPUT"
+          echo "grafana_api_token=$(terraform output -raw grafana_api_token)" >> "$GITHUB_OUTPUT"
 
   build-frontend:
     name: "Build & Push Frontend"
@@ -191,6 +193,59 @@ jobs:
             sleep 10
           done
 
+      - name: Configure Grafana
+        env:
+          GRAFANA_URL: https://${{ needs.terraform-staging.outputs.grafana_endpoint }}
+          GRAFANA_TOKEN: ${{ needs.terraform-staging.outputs.grafana_api_token }}
+          AMP_ENDPOINT: ${{ needs.terraform-staging.outputs.amp_endpoint }}
+          AWS_REGION_VAL: ${{ env.AWS_REGION }}
+        run: |
+          # Create/update AMP datasource
+          curl -sf -X POST "${GRAFANA_URL}/api/datasources" \
+            -H "Authorization: Bearer ${GRAFANA_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "name": "Amazon Managed Prometheus",
+              "type": "prometheus",
+              "url": "'"${AMP_ENDPOINT}"'",
+              "access": "proxy",
+              "isDefault": true,
+              "jsonData": {
+                "httpMethod": "POST",
+                "sigV4Auth": true,
+                "sigV4Region": "'"${AWS_REGION_VAL}"'"
+              }
+            }' || echo "Datasource may already exist"
+
+          # Create/update X-Ray datasource
+          curl -sf -X POST "${GRAFANA_URL}/api/datasources" \
+            -H "Authorization: Bearer ${GRAFANA_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "name": "AWS X-Ray",
+              "type": "grafana-x-ray-datasource",
+              "access": "proxy",
+              "jsonData": {
+                "defaultRegion": "'"${AWS_REGION_VAL}"'"
+              }
+            }' || echo "Datasource may already exist"
+
+          # Get Prometheus datasource UID for dashboard variable substitution
+          DS_UID=$(curl -sf "${GRAFANA_URL}/api/datasources/name/Amazon%20Managed%20Prometheus" \
+            -H "Authorization: Bearer ${GRAFANA_TOKEN}" | jq -r '.uid')
+
+          # Import dashboard with datasource UID replaced
+          if [ -f k8s/observability/grafana/dashboards/microservices.json ]; then
+            DASHBOARD=$(cat k8s/observability/grafana/dashboards/microservices.json \
+              | sed "s/\${DS_PROMETHEUS}/${DS_UID}/g")
+            curl -sf -X POST "${GRAFANA_URL}/api/dashboards/db" \
+              -H "Authorization: Bearer ${GRAFANA_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "{\"dashboard\": ${DASHBOARD}, \"overwrite\": true}"
+          else
+            echo "Dashboard JSON not found, skipping import"
+          fi
+
   # ---------------------------------------------------------------------------
   # PRODUCTION — requires manual approval in GitHub environment settings
   # ---------------------------------------------------------------------------
@@ -209,6 +264,7 @@ jobs:
       amp_endpoint: ${{ steps.tf.outputs.amp_endpoint }}
       otel_collector_role_arn: ${{ steps.tf.outputs.otel_collector_role_arn }}
       grafana_endpoint: ${{ steps.tf.outputs.grafana_endpoint }}
+      grafana_api_token: ${{ steps.tf.outputs.grafana_api_token }}
     steps:
       - uses: actions/checkout@v4
 
@@ -245,6 +301,7 @@ jobs:
           echo "amp_endpoint=$(terraform output -raw amp_workspace_endpoint)" >> "$GITHUB_OUTPUT"
           echo "otel_collector_role_arn=$(terraform output -raw otel_collector_role_arn)" >> "$GITHUB_OUTPUT"
           echo "grafana_endpoint=$(terraform output -raw grafana_workspace_endpoint)" >> "$GITHUB_OUTPUT"
+          echo "grafana_api_token=$(terraform output -raw grafana_api_token)" >> "$GITHUB_OUTPUT"
 
   deploy-production:
     name: "Deploy (production)"
@@ -320,3 +377,56 @@ jobs:
             fi
             sleep 10
           done
+
+      - name: Configure Grafana
+        env:
+          GRAFANA_URL: https://${{ needs.terraform-production.outputs.grafana_endpoint }}
+          GRAFANA_TOKEN: ${{ needs.terraform-production.outputs.grafana_api_token }}
+          AMP_ENDPOINT: ${{ needs.terraform-production.outputs.amp_endpoint }}
+          AWS_REGION_VAL: ${{ env.AWS_REGION }}
+        run: |
+          # Create/update AMP datasource
+          curl -sf -X POST "${GRAFANA_URL}/api/datasources" \
+            -H "Authorization: Bearer ${GRAFANA_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "name": "Amazon Managed Prometheus",
+              "type": "prometheus",
+              "url": "'"${AMP_ENDPOINT}"'",
+              "access": "proxy",
+              "isDefault": true,
+              "jsonData": {
+                "httpMethod": "POST",
+                "sigV4Auth": true,
+                "sigV4Region": "'"${AWS_REGION_VAL}"'"
+              }
+            }' || echo "Datasource may already exist"
+
+          # Create/update X-Ray datasource
+          curl -sf -X POST "${GRAFANA_URL}/api/datasources" \
+            -H "Authorization: Bearer ${GRAFANA_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "name": "AWS X-Ray",
+              "type": "grafana-x-ray-datasource",
+              "access": "proxy",
+              "jsonData": {
+                "defaultRegion": "'"${AWS_REGION_VAL}"'"
+              }
+            }' || echo "Datasource may already exist"
+
+          # Get Prometheus datasource UID for dashboard variable substitution
+          DS_UID=$(curl -sf "${GRAFANA_URL}/api/datasources/name/Amazon%20Managed%20Prometheus" \
+            -H "Authorization: Bearer ${GRAFANA_TOKEN}" | jq -r '.uid')
+
+          # Import dashboard with datasource UID replaced
+          if [ -f k8s/observability/grafana/dashboards/microservices.json ]; then
+            DASHBOARD=$(cat k8s/observability/grafana/dashboards/microservices.json \
+              | sed "s/\${DS_PROMETHEUS}/${DS_UID}/g")
+            curl -sf -X POST "${GRAFANA_URL}/api/dashboards/db" \
+              -H "Authorization: Bearer ${GRAFANA_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "{\"dashboard\": ${DASHBOARD}, \"overwrite\": true}"
+          else
+            echo "Dashboard JSON not found, skipping import"
+          fi
