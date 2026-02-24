@@ -213,6 +213,7 @@ jobs:
               "jsonData": {
                 "httpMethod": "POST",
                 "sigV4Auth": true,
+                "sigV4AuthType": "default",
                 "sigV4Region": "'"${AWS_REGION_VAL}"'"
               }
             }' || echo "Datasource may already exist"
@@ -398,6 +399,7 @@ jobs:
               "jsonData": {
                 "httpMethod": "POST",
                 "sigV4Auth": true,
+                "sigV4AuthType": "default",
                 "sigV4Region": "'"${AWS_REGION_VAL}"'"
               }
             }' || echo "Datasource may already exist"
