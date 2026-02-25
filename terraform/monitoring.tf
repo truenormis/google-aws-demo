@@ -118,7 +118,7 @@ data "aws_iam_policy_document" "otel_collector_assume_role" {
     condition {
       test     = "StringEquals"
       variable = "${replace(aws_eks_cluster.main.identity[0].oidc[0].issuer, "https://", "")}:sub"
-      values   = ["system:serviceaccount:default:opentelemetrycollector"]
+      values   = ["system:serviceaccount:demo:opentelemetrycollector"]
     }
 
     condition {
