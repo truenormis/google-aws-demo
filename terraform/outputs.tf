@@ -64,9 +64,19 @@ output "acm_certificate_arn" {
   value       = aws_acm_certificate_validation.main.certificate_arn
 }
 
-output "ecr_repository_url" {
-  description = "ECR repository URL"
-  value       = aws_ecr_repository.app.repository_url
+output "ecr_frontend_url" {
+  description = "ECR repository URL for frontend"
+  value       = aws_ecr_repository.app["frontend"].repository_url
+}
+
+output "ecr_productcatalogservice_url" {
+  description = "ECR repository URL for productcatalogservice"
+  value       = aws_ecr_repository.app["productcatalogservice"].repository_url
+}
+
+output "ecr_currencyservice_url" {
+  description = "ECR repository URL for currencyservice"
+  value       = aws_ecr_repository.app["currencyservice"].repository_url
 }
 
 output "amp_workspace_endpoint" {
@@ -103,4 +113,9 @@ output "cloudfront_domain_name" {
 output "origin_acm_certificate_arn" {
   description = "ACM certificate ARN for origin subdomains (used by ALB)"
   value       = aws_acm_certificate_validation.origin.certificate_arn
+}
+
+output "elasticache_endpoint" {
+  description = "ElastiCache Serverless endpoint for cart database"
+  value       = aws_elasticache_serverless_cache.main.endpoint[0].address
 }

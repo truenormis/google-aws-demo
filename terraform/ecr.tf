@@ -1,5 +1,14 @@
+locals {
+  ecr_repositories = {
+    frontend              = "${var.project_name}/frontend"
+    productcatalogservice = "${var.project_name}/productcatalogservice"
+    currencyservice       = "${var.project_name}/currencyservice"
+  }
+}
+
 resource "aws_ecr_repository" "app" {
-  name                 = "${var.project_name}/app"
+  for_each             = local.ecr_repositories
+  name                 = each.value
   image_tag_mutability = "MUTABLE"
   force_delete         = true
 
@@ -9,7 +18,8 @@ resource "aws_ecr_repository" "app" {
 }
 
 resource "aws_ecr_lifecycle_policy" "app" {
-  repository = aws_ecr_repository.app.name
+  for_each   = local.ecr_repositories
+  repository = aws_ecr_repository.app[each.key].name
 
   policy = jsonencode({
     rules = [{

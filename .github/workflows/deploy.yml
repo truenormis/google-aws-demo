@@ -7,7 +7,9 @@ on:
       - "k8s/**"
       - "terraform/**"
       - "src/frontend/**"
-      - ".github/workflows/deploy.yml"
+      - "src/productcatalogservice/**"
+      - "src/currencyservice/**"
+      - ".github/workflows/**"
   workflow_dispatch:
     inputs:
       environment:
@@ -28,459 +30,113 @@ jobs:
   # STAGING
   # ---------------------------------------------------------------------------
   terraform-staging:
-    name: "Terraform (staging)"
-    runs-on: ubuntu-latest
-    environment: staging
-    outputs:
-      cluster_name: ${{ steps.tf.outputs.cluster_name }}
-      aws_region: ${{ steps.tf.outputs.aws_region }}
-      vpc_id: ${{ steps.tf.outputs.vpc_id }}
-      lb_controller_role_arn: ${{ steps.tf.outputs.lb_controller_role_arn }}
-      acm_certificate_arn: ${{ steps.tf.outputs.acm_certificate_arn }}
-      origin_acm_certificate_arn: ${{ steps.tf.outputs.origin_acm_certificate_arn }}
-      ecr_repository_url: ${{ steps.tf.outputs.ecr_repository_url }}
-      amp_endpoint: ${{ steps.tf.outputs.amp_endpoint }}
-      otel_collector_role_arn: ${{ steps.tf.outputs.otel_collector_role_arn }}
-      grafana_endpoint: ${{ steps.tf.outputs.grafana_endpoint }}
-      grafana_api_token: ${{ steps.tf.outputs.grafana_api_token }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_wrapper: false
-
-      - name: Terraform Init & Apply
-        working-directory: terraform
-        env:
-          TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          TF_VAR_cloudflare_zone_id: ${{ secrets.CLOUDFLARE_ZONE_ID }}
-
-        run: |
-          terraform init
-          terraform workspace select staging || terraform workspace new staging
-          terraform apply -auto-approve -var-file=envs/staging.tfvars
-
-      - name: Export outputs
-        id: tf
-        working-directory: terraform
-        run: |
-          echo "cluster_name=$(terraform output -raw cluster_name)" >> "$GITHUB_OUTPUT"
-          echo "aws_region=$(terraform output -raw aws_region)" >> "$GITHUB_OUTPUT"
-          echo "vpc_id=$(terraform output -raw vpc_id)" >> "$GITHUB_OUTPUT"
-          echo "lb_controller_role_arn=$(terraform output -raw aws_lb_controller_role_arn)" >> "$GITHUB_OUTPUT"
-          echo "acm_certificate_arn=$(terraform output -raw acm_certificate_arn)" >> "$GITHUB_OUTPUT"
-          echo "origin_acm_certificate_arn=$(terraform output -raw origin_acm_certificate_arn)" >> "$GITHUB_OUTPUT"
-          echo "ecr_repository_url=$(terraform output -raw ecr_repository_url)" >> "$GITHUB_OUTPUT"
-          echo "amp_endpoint=$(terraform output -raw amp_workspace_endpoint)" >> "$GITHUB_OUTPUT"
-          echo "otel_collector_role_arn=$(terraform output -raw otel_collector_role_arn)" >> "$GITHUB_OUTPUT"
-          echo "grafana_endpoint=$(terraform output -raw grafana_workspace_endpoint)" >> "$GITHUB_OUTPUT"
-          echo "grafana_api_token=$(terraform output -raw grafana_api_token)" >> "$GITHUB_OUTPUT"
+    uses: ./.github/workflows/_terraform.yml
+    with:
+      environment: staging
+      workspace: staging
+      tfvars: envs/staging.tfvars
+      aws_region: eu-central-1
+    secrets:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
 
   build-frontend:
-    name: "Build & Push Frontend"
     needs: terraform-staging
-    runs-on: ubuntu-latest
-    outputs:
-      image_tag: ${{ steps.meta.outputs.image_tag }}
-    steps:
-      - uses: actions/checkout@v4
+    uses: ./.github/workflows/_build-image.yml
+    with:
+      context: ./src/frontend
+      ecr_url: ${{ needs.terraform-staging.outputs.ecr_frontend_url }}
+      aws_region: eu-central-1
+    secrets:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
 
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
+  build-productcatalogservice:
+    needs: terraform-staging
+    uses: ./.github/workflows/_build-image.yml
+    with:
+      context: ./src/productcatalogservice
+      ecr_url: ${{ needs.terraform-staging.outputs.ecr_productcatalogservice_url }}
+      cache_scope: productcatalogservice
+      aws_region: eu-central-1
+    secrets:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
 
-      - name: Login to Amazon ECR
-        id: ecr-login
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - uses: docker/setup-buildx-action@v3
-
-      - name: Image metadata
-        id: meta
-        run: |
-          echo "image_tag=${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
-
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          context: ./src/frontend
-          file: ./src/frontend/Dockerfile
-          platforms: linux/amd64
-          push: true
-          tags: |
-            ${{ needs.terraform-staging.outputs.ecr_repository_url }}:${{ steps.meta.outputs.image_tag }}
-            ${{ needs.terraform-staging.outputs.ecr_repository_url }}:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+  build-currencyservice:
+    needs: terraform-staging
+    uses: ./.github/workflows/_build-image.yml
+    with:
+      context: ./src/currencyservice
+      ecr_url: ${{ needs.terraform-staging.outputs.ecr_currencyservice_url }}
+      cache_scope: currencyservice
+      aws_region: eu-central-1
+    secrets:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
 
   deploy-staging:
-    name: "Deploy (staging)"
-    needs: [terraform-staging, build-frontend]
-    runs-on: ubuntu-latest
-    environment: staging
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Update kubeconfig
-        run: |
-          aws eks update-kubeconfig \
-            --region ${{ needs.terraform-staging.outputs.aws_region }} \
-            --name ${{ needs.terraform-staging.outputs.cluster_name }}
-
-      - name: Install AWS Load Balancer Controller
-        run: |
-          helm repo add eks https://aws.github.io/eks-charts
-          helm repo update eks
-          helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-controller \
-            --namespace kube-system \
-            --values k8s/aws-load-balancer-controller/values.yaml \
-            --set clusterName=${{ needs.terraform-staging.outputs.cluster_name }} \
-            --set region=${{ needs.terraform-staging.outputs.aws_region }} \
-            --set vpcId=${{ needs.terraform-staging.outputs.vpc_id }} \
-            --set "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn=${{ needs.terraform-staging.outputs.lb_controller_role_arn }}" \
-            --wait
-
-      - name: Install ExternalDNS
-        run: |
-          kubectl create secret generic cloudflare-api-token \
-            --namespace kube-system \
-            --from-literal=api-token=${{ secrets.CLOUDFLARE_API_TOKEN }} \
-            --dry-run=client -o yaml | kubectl apply -f -
-          helm repo add external-dns https://kubernetes-sigs.github.io/external-dns
-          helm repo update external-dns
-          helm upgrade --install external-dns external-dns/external-dns \
-            --namespace kube-system \
-            --values k8s/external-dns/values.yaml \
-            --wait
-
-      - name: Deploy app
-        env:
-          AMP_ENDPOINT: ${{ needs.terraform-staging.outputs.amp_endpoint }}
-          OTEL_ROLE_ARN: ${{ needs.terraform-staging.outputs.otel_collector_role_arn }}
-        run: |
-          helm upgrade --install test-app ./k8s/test-app \
-            --namespace default \
-            --values k8s/test-app/values.yaml \
-            --set "frontend.image.repository=${{ needs.terraform-staging.outputs.ecr_repository_url }}" \
-            --set "frontend.image.tag=${{ needs.build-frontend.outputs.image_tag }}" \
-            --set "frontend.appEnv=staging" \
-            --set "ingress.annotations.alb\\.ingress\\.kubernetes\\.io/certificate-arn=${{ needs.terraform-staging.outputs.origin_acm_certificate_arn }}" \
-            --set "ingress.hosts[0].host=origin-staging.shop.whiteforge.ai" \
-            --set "opentelemetryCollector.ampEndpoint=${AMP_ENDPOINT}api/v1/remote_write" \
-            --set "opentelemetryCollector.awsRegion=${{ env.AWS_REGION }}" \
-            --set "opentelemetryCollector.irsaRoleArn=${OTEL_ROLE_ARN}" \
-            --wait --timeout 5m
-
-      - name: Wait for ALB
-        run: |
-          for i in $(seq 1 30); do
-            ALB=$(kubectl get ingress frontend -n default -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
-            if [ -n "$ALB" ]; then
-              echo "::notice::ALB endpoint (staging): https://${ALB}"
-              echo "::notice::ExternalDNS will create CNAME: origin-staging.shop.whiteforge.ai -> ${ALB}"
-              break
-            fi
-            sleep 10
-          done
-
-      - name: Configure Grafana
-        env:
-          GRAFANA_URL: https://${{ needs.terraform-staging.outputs.grafana_endpoint }}
-          GRAFANA_TOKEN: ${{ needs.terraform-staging.outputs.grafana_api_token }}
-          AMP_ENDPOINT: ${{ needs.terraform-staging.outputs.amp_endpoint }}
-          AWS_REGION_VAL: ${{ env.AWS_REGION }}
-        run: |
-          # Helper: create or update datasource by name
-          upsert_datasource() {
-            local payload="$1"
-            local ds_name
-            ds_name=$(echo "$payload" | jq -r '.name')
-            local encoded_name
-            encoded_name=$(printf '%s' "$ds_name" | jq -sRr @uri)
-
-            # Check if datasource already exists
-            local existing
-            existing=$(curl -sf "${GRAFANA_URL}/api/datasources/name/${encoded_name}" \
-              -H "Authorization: Bearer ${GRAFANA_TOKEN}" 2>/dev/null) || true
-
-            if echo "$existing" | jq -e '.id' >/dev/null 2>&1; then
-              local ds_id
-              ds_id=$(echo "$existing" | jq -r '.id')
-              echo "Updating datasource '${ds_name}' (id=${ds_id})"
-              curl -sf -X PUT "${GRAFANA_URL}/api/datasources/${ds_id}" \
-                -H "Authorization: Bearer ${GRAFANA_TOKEN}" \
-                -H "Content-Type: application/json" \
-                -d "$payload"
-            else
-              echo "Creating datasource '${ds_name}'"
-              curl -sf -X POST "${GRAFANA_URL}/api/datasources" \
-                -H "Authorization: Bearer ${GRAFANA_TOKEN}" \
-                -H "Content-Type: application/json" \
-                -d "$payload"
-            fi
-          }
-
-          # AMP datasource
-          upsert_datasource '{
-            "name": "Amazon Managed Prometheus",
-            "type": "prometheus",
-            "url": "'"${AMP_ENDPOINT}"'",
-            "access": "proxy",
-            "isDefault": true,
-            "jsonData": {
-              "httpMethod": "POST",
-              "sigV4Auth": true,
-              "sigV4AuthType": "default",
-              "sigV4Region": "'"${AWS_REGION_VAL}"'"
-            }
-          }'
-
-          # X-Ray datasource
-          upsert_datasource '{
-            "name": "AWS X-Ray",
-            "type": "grafana-x-ray-datasource",
-            "access": "proxy",
-            "jsonData": {
-              "defaultRegion": "'"${AWS_REGION_VAL}"'"
-            }
-          }'
-
-          # Get Prometheus datasource UID for dashboard variable substitution
-          DS_UID=$(curl -sf "${GRAFANA_URL}/api/datasources/name/Amazon%20Managed%20Prometheus" \
-            -H "Authorization: Bearer ${GRAFANA_TOKEN}" | jq -r '.uid')
-
-          # Import dashboard with datasource UID replaced
-          if [ -f k8s/observability/grafana/dashboards/microservices.json ]; then
-            DASHBOARD=$(cat k8s/observability/grafana/dashboards/microservices.json \
-              | sed "s/\${DS_PROMETHEUS}/${DS_UID}/g")
-            curl -sf -X POST "${GRAFANA_URL}/api/dashboards/db" \
-              -H "Authorization: Bearer ${GRAFANA_TOKEN}" \
-              -H "Content-Type: application/json" \
-              -d "{\"dashboard\": ${DASHBOARD}, \"overwrite\": true}"
-          else
-            echo "Dashboard JSON not found, skipping import"
-          fi
+    needs: [terraform-staging, build-frontend, build-productcatalogservice, build-currencyservice]
+    uses: ./.github/workflows/_deploy-env.yml
+    with:
+      environment: staging
+      aws_region: eu-central-1
+      cluster_name: ${{ needs.terraform-staging.outputs.cluster_name }}
+      vpc_id: ${{ needs.terraform-staging.outputs.vpc_id }}
+      lb_controller_role_arn: ${{ needs.terraform-staging.outputs.lb_controller_role_arn }}
+      origin_acm_certificate_arn: ${{ needs.terraform-staging.outputs.origin_acm_certificate_arn }}
+      hostname: origin-staging.shop.whiteforge.ai
+      ecr_frontend_url: ${{ needs.terraform-staging.outputs.ecr_frontend_url }}
+      frontend_image_tag: ${{ needs.build-frontend.outputs.image_tag }}
+      ecr_productcatalogservice_url: ${{ needs.terraform-staging.outputs.ecr_productcatalogservice_url }}
+      productcatalogservice_image_tag: ${{ needs.build-productcatalogservice.outputs.image_tag }}
+      ecr_currencyservice_url: ${{ needs.terraform-staging.outputs.ecr_currencyservice_url }}
+      currencyservice_image_tag: ${{ needs.build-currencyservice.outputs.image_tag }}
+      amp_endpoint: ${{ needs.terraform-staging.outputs.amp_endpoint }}
+      otel_collector_role_arn: ${{ needs.terraform-staging.outputs.otel_collector_role_arn }}
+      grafana_endpoint: ${{ needs.terraform-staging.outputs.grafana_endpoint }}
+      grafana_api_token: ${{ needs.terraform-staging.outputs.grafana_api_token }}
+      elasticache_endpoint: ${{ needs.terraform-staging.outputs.elasticache_endpoint }}
+    secrets:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
   # ---------------------------------------------------------------------------
   # PRODUCTION — requires manual approval in GitHub environment settings
   # ---------------------------------------------------------------------------
   terraform-production:
-    name: "Terraform (production)"
     needs: deploy-staging
-    runs-on: ubuntu-latest
-    environment: production
-    outputs:
-      cluster_name: ${{ steps.tf.outputs.cluster_name }}
-      aws_region: ${{ steps.tf.outputs.aws_region }}
-      vpc_id: ${{ steps.tf.outputs.vpc_id }}
-      lb_controller_role_arn: ${{ steps.tf.outputs.lb_controller_role_arn }}
-      acm_certificate_arn: ${{ steps.tf.outputs.acm_certificate_arn }}
-      origin_acm_certificate_arn: ${{ steps.tf.outputs.origin_acm_certificate_arn }}
-      ecr_repository_url: ${{ steps.tf.outputs.ecr_repository_url }}
-      amp_endpoint: ${{ steps.tf.outputs.amp_endpoint }}
-      otel_collector_role_arn: ${{ steps.tf.outputs.otel_collector_role_arn }}
-      grafana_endpoint: ${{ steps.tf.outputs.grafana_endpoint }}
-      grafana_api_token: ${{ steps.tf.outputs.grafana_api_token }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_wrapper: false
-
-      - name: Terraform Init & Apply
-        working-directory: terraform
-        env:
-          TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          TF_VAR_cloudflare_zone_id: ${{ secrets.CLOUDFLARE_ZONE_ID }}
-
-        run: |
-          terraform init
-          terraform workspace select production || terraform workspace new production
-          terraform apply -auto-approve -var-file=envs/production.tfvars
-
-      - name: Export outputs
-        id: tf
-        working-directory: terraform
-        run: |
-          echo "cluster_name=$(terraform output -raw cluster_name)" >> "$GITHUB_OUTPUT"
-          echo "aws_region=$(terraform output -raw aws_region)" >> "$GITHUB_OUTPUT"
-          echo "vpc_id=$(terraform output -raw vpc_id)" >> "$GITHUB_OUTPUT"
-          echo "lb_controller_role_arn=$(terraform output -raw aws_lb_controller_role_arn)" >> "$GITHUB_OUTPUT"
-          echo "acm_certificate_arn=$(terraform output -raw acm_certificate_arn)" >> "$GITHUB_OUTPUT"
-          echo "origin_acm_certificate_arn=$(terraform output -raw origin_acm_certificate_arn)" >> "$GITHUB_OUTPUT"
-          echo "ecr_repository_url=$(terraform output -raw ecr_repository_url)" >> "$GITHUB_OUTPUT"
-          echo "amp_endpoint=$(terraform output -raw amp_workspace_endpoint)" >> "$GITHUB_OUTPUT"
-          echo "otel_collector_role_arn=$(terraform output -raw otel_collector_role_arn)" >> "$GITHUB_OUTPUT"
-          echo "grafana_endpoint=$(terraform output -raw grafana_workspace_endpoint)" >> "$GITHUB_OUTPUT"
-          echo "grafana_api_token=$(terraform output -raw grafana_api_token)" >> "$GITHUB_OUTPUT"
+    uses: ./.github/workflows/_terraform.yml
+    with:
+      environment: production
+      workspace: production
+      tfvars: envs/production.tfvars
+      aws_region: eu-central-1
+    secrets:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
 
   deploy-production:
-    name: "Deploy (production)"
-    needs: [terraform-production, build-frontend]
-    runs-on: ubuntu-latest
-    environment: production
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Update kubeconfig
-        run: |
-          aws eks update-kubeconfig \
-            --region ${{ needs.terraform-production.outputs.aws_region }} \
-            --name ${{ needs.terraform-production.outputs.cluster_name }}
-
-      - name: Install AWS Load Balancer Controller
-        run: |
-          helm repo add eks https://aws.github.io/eks-charts
-          helm repo update eks
-          helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-controller \
-            --namespace kube-system \
-            --values k8s/aws-load-balancer-controller/values.yaml \
-            --set clusterName=${{ needs.terraform-production.outputs.cluster_name }} \
-            --set region=${{ needs.terraform-production.outputs.aws_region }} \
-            --set vpcId=${{ needs.terraform-production.outputs.vpc_id }} \
-            --set "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn=${{ needs.terraform-production.outputs.lb_controller_role_arn }}" \
-            --wait
-
-      - name: Install ExternalDNS
-        run: |
-          kubectl create secret generic cloudflare-api-token \
-            --namespace kube-system \
-            --from-literal=api-token=${{ secrets.CLOUDFLARE_API_TOKEN }} \
-            --dry-run=client -o yaml | kubectl apply -f -
-          helm repo add external-dns https://kubernetes-sigs.github.io/external-dns
-          helm repo update external-dns
-          helm upgrade --install external-dns external-dns/external-dns \
-            --namespace kube-system \
-            --values k8s/external-dns/values.yaml \
-            --wait
-
-      - name: Deploy app
-        env:
-          AMP_ENDPOINT: ${{ needs.terraform-production.outputs.amp_endpoint }}
-          OTEL_ROLE_ARN: ${{ needs.terraform-production.outputs.otel_collector_role_arn }}
-        run: |
-          helm upgrade --install test-app ./k8s/test-app \
-            --namespace default \
-            --values k8s/test-app/values.yaml \
-            --set "frontend.image.repository=${{ needs.terraform-production.outputs.ecr_repository_url }}" \
-            --set "frontend.image.tag=${{ needs.build-frontend.outputs.image_tag }}" \
-            --set "frontend.appEnv=production" \
-            --set "ingress.annotations.alb\\.ingress\\.kubernetes\\.io/certificate-arn=${{ needs.terraform-production.outputs.origin_acm_certificate_arn }}" \
-            --set "ingress.hosts[0].host=origin.shop.whiteforge.ai" \
-            --set "opentelemetryCollector.ampEndpoint=${AMP_ENDPOINT}api/v1/remote_write" \
-            --set "opentelemetryCollector.awsRegion=${{ env.AWS_REGION }}" \
-            --set "opentelemetryCollector.irsaRoleArn=${OTEL_ROLE_ARN}" \
-            --wait --timeout 5m
-
-      - name: Wait for ALB
-        run: |
-          for i in $(seq 1 30); do
-            ALB=$(kubectl get ingress frontend -n default -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
-            if [ -n "$ALB" ]; then
-              echo "::notice::ALB endpoint (production): https://${ALB}"
-              echo "::notice::ExternalDNS will create CNAME: origin.shop.whiteforge.ai -> ${ALB}"
-              break
-            fi
-            sleep 10
-          done
-
-      - name: Configure Grafana
-        env:
-          GRAFANA_URL: https://${{ needs.terraform-production.outputs.grafana_endpoint }}
-          GRAFANA_TOKEN: ${{ needs.terraform-production.outputs.grafana_api_token }}
-          AMP_ENDPOINT: ${{ needs.terraform-production.outputs.amp_endpoint }}
-          AWS_REGION_VAL: ${{ env.AWS_REGION }}
-        run: |
-          # Helper: create or update datasource by name
-          upsert_datasource() {
-            local payload="$1"
-            local ds_name
-            ds_name=$(echo "$payload" | jq -r '.name')
-            local encoded_name
-            encoded_name=$(printf '%s' "$ds_name" | jq -sRr @uri)
-
-            # Check if datasource already exists
-            local existing
-            existing=$(curl -sf "${GRAFANA_URL}/api/datasources/name/${encoded_name}" \
-              -H "Authorization: Bearer ${GRAFANA_TOKEN}" 2>/dev/null) || true
-
-            if echo "$existing" | jq -e '.id' >/dev/null 2>&1; then
-              local ds_id
-              ds_id=$(echo "$existing" | jq -r '.id')
-              echo "Updating datasource '${ds_name}' (id=${ds_id})"
-              curl -sf -X PUT "${GRAFANA_URL}/api/datasources/${ds_id}" \
-                -H "Authorization: Bearer ${GRAFANA_TOKEN}" \
-                -H "Content-Type: application/json" \
-                -d "$payload"
-            else
-              echo "Creating datasource '${ds_name}'"
-              curl -sf -X POST "${GRAFANA_URL}/api/datasources" \
-                -H "Authorization: Bearer ${GRAFANA_TOKEN}" \
-                -H "Content-Type: application/json" \
-                -d "$payload"
-            fi
-          }
-
-          # AMP datasource
-          upsert_datasource '{
-            "name": "Amazon Managed Prometheus",
-            "type": "prometheus",
-            "url": "'"${AMP_ENDPOINT}"'",
-            "access": "proxy",
-            "isDefault": true,
-            "jsonData": {
-              "httpMethod": "POST",
-              "sigV4Auth": true,
-              "sigV4AuthType": "default",
-              "sigV4Region": "'"${AWS_REGION_VAL}"'"
-            }
-          }'
-
-          # X-Ray datasource
-          upsert_datasource '{
-            "name": "AWS X-Ray",
-            "type": "grafana-x-ray-datasource",
-            "access": "proxy",
-            "jsonData": {
-              "defaultRegion": "'"${AWS_REGION_VAL}"'"
-            }
-          }'
-
-          # Get Prometheus datasource UID for dashboard variable substitution
-          DS_UID=$(curl -sf "${GRAFANA_URL}/api/datasources/name/Amazon%20Managed%20Prometheus" \
-            -H "Authorization: Bearer ${GRAFANA_TOKEN}" | jq -r '.uid')
-
-          # Import dashboard with datasource UID replaced
-          if [ -f k8s/observability/grafana/dashboards/microservices.json ]; then
-            DASHBOARD=$(cat k8s/observability/grafana/dashboards/microservices.json \
-              | sed "s/\${DS_PROMETHEUS}/${DS_UID}/g")
-            curl -sf -X POST "${GRAFANA_URL}/api/dashboards/db" \
-              -H "Authorization: Bearer ${GRAFANA_TOKEN}" \
-              -H "Content-Type: application/json" \
-              -d "{\"dashboard\": ${DASHBOARD}, \"overwrite\": true}"
-          else
-            echo "Dashboard JSON not found, skipping import"
-          fi
+    needs: [terraform-production, build-frontend, build-productcatalogservice, build-currencyservice]
+    uses: ./.github/workflows/_deploy-env.yml
+    with:
+      environment: production
+      aws_region: eu-central-1
+      cluster_name: ${{ needs.terraform-production.outputs.cluster_name }}
+      vpc_id: ${{ needs.terraform-production.outputs.vpc_id }}
+      lb_controller_role_arn: ${{ needs.terraform-production.outputs.lb_controller_role_arn }}
+      origin_acm_certificate_arn: ${{ needs.terraform-production.outputs.origin_acm_certificate_arn }}
+      hostname: origin.shop.whiteforge.ai
+      ecr_frontend_url: ${{ needs.terraform-production.outputs.ecr_frontend_url }}
+      frontend_image_tag: ${{ needs.build-frontend.outputs.image_tag }}
+      ecr_productcatalogservice_url: ${{ needs.terraform-production.outputs.ecr_productcatalogservice_url }}
+      productcatalogservice_image_tag: ${{ needs.build-productcatalogservice.outputs.image_tag }}
+      ecr_currencyservice_url: ${{ needs.terraform-production.outputs.ecr_currencyservice_url }}
+      currencyservice_image_tag: ${{ needs.build-currencyservice.outputs.image_tag }}
+      amp_endpoint: ${{ needs.terraform-production.outputs.amp_endpoint }}
+      otel_collector_role_arn: ${{ needs.terraform-production.outputs.otel_collector_role_arn }}
+      grafana_endpoint: ${{ needs.terraform-production.outputs.grafana_endpoint }}
+      grafana_api_token: ${{ needs.terraform-production.outputs.grafana_api_token }}
+      elasticache_endpoint: ${{ needs.terraform-production.outputs.elasticache_endpoint }}
+    secrets:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

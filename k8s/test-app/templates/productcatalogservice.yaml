@@ -13,15 +13,6 @@
 # limitations under the License.
 
 {{- if .Values.productCatalogService.create }}
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: {{ .Values.productCatalogService.name }}-config
-  namespace: {{ .Release.Namespace }}
-data:
-  products.json: |
-    {{- .Files.Get "product_data/products.json" | nindent 4 }}
----
 {{- if .Values.serviceAccounts.create }}
 apiVersion: v1
 kind: ServiceAccount
@@ -78,7 +69,11 @@ spec:
               - ALL
           privileged: false
           readOnlyRootFilesystem: true
+        {{- if .Values.productCatalogService.image.repository }}
+        image: {{ .Values.productCatalogService.image.repository }}:{{ .Values.productCatalogService.image.tag | default "latest" }}
+        {{- else }}
         image: {{ .Values.images.repository }}/{{ .Values.productCatalogService.name }}:{{ .Values.images.tag | default .Chart.AppVersion }}
+        {{- end }}
         ports:
         - containerPort: 3550
         env:
@@ -106,17 +101,8 @@ spec:
         livenessProbe:
           grpc:
             port: 3550
-        volumeMounts:
-        - name: product-catalog-config
-          mountPath: /src/products.json
-          subPath: products.json
-          readOnly: true
         resources:
           {{- toYaml .Values.productCatalogService.resources | nindent 10 }}
-      volumes:
-      - name: product-catalog-config
-        configMap:
-          name: {{ .Values.productCatalogService.name }}-config
 ---
 apiVersion: v1
 kind: Service
