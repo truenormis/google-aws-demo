@@ -14,9 +14,6 @@ sources:
 domainFilters:
   - whiteforge.ai
 
-excludeDomains:
-  - shop.whiteforge.ai
-  - staging.shop.whiteforge.ai
 
 policy: upsert-only
 
