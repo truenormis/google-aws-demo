@@ -126,13 +126,13 @@ jobs:
             --set "opentelemetryCollector.ampEndpoint=${{ inputs.amp_endpoint }}api/v1/remote_write" \
             --set "opentelemetryCollector.awsRegion=${{ inputs.aws_region }}" \
             --set "opentelemetryCollector.irsaRoleArn=${{ inputs.otel_collector_role_arn }}" \
-            --set "cartDatabase.connectionString=${{ inputs.elasticache_endpoint }}:6379" \
+            --set "cartDatabase.connectionString=${{ inputs.elasticache_endpoint }}:6379\,ssl=true\,abortConnect=false" \
             --wait --timeout 5m
 
       - name: Wait for ALB
         run: |
           for i in $(seq 1 30); do
-            ALB=$(kubectl get ingress frontend -n default -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
+            ALB=$(kubectl get ingress frontend -n demo -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
             if [ -n "$ALB" ]; then
               echo "::notice::ALB endpoint (${{ inputs.environment }}): https://${ALB}"
               echo "::notice::ExternalDNS will create CNAME: ${{ inputs.hostname }} -> ${ALB}"
