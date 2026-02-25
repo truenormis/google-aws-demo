@@ -15,8 +15,8 @@ on:
       environment:
         description: "Environment to deploy"
         type: choice
-        options: [staging, production]
-        default: staging
+        options: [staging, production, all]
+        default: all
 
 env:
   AWS_REGION: eu-central-1
@@ -27,7 +27,7 @@ permissions:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # STAGING
+  # SHARED — terraform-staging + builds always run (provide ECR URLs & images)
   # ---------------------------------------------------------------------------
   terraform-staging:
     uses: ./.github/workflows/_terraform.yml
@@ -73,8 +73,15 @@ jobs:
     secrets:
       AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
 
+  # ---------------------------------------------------------------------------
+  # STAGING — deploy (skipped when manually selecting "production" only)
+  # ---------------------------------------------------------------------------
   deploy-staging:
     needs: [terraform-staging, build-frontend, build-productcatalogservice, build-currencyservice]
+    if: >-
+      github.event_name == 'push' ||
+      inputs.environment == 'staging' ||
+      inputs.environment == 'all'
     uses: ./.github/workflows/_deploy-env.yml
     with:
       environment: staging
@@ -101,9 +108,16 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # PRODUCTION — requires manual approval in GitHub environment settings
+  # Uses always() so it runs even when deploy-staging is skipped (production-only)
   # ---------------------------------------------------------------------------
   terraform-production:
-    needs: deploy-staging
+    needs: [deploy-staging, build-frontend, build-productcatalogservice, build-currencyservice]
+    if: >-
+      always() && !failure() && !cancelled() && (
+        github.event_name == 'push' ||
+        inputs.environment == 'production' ||
+        inputs.environment == 'all'
+      )
     uses: ./.github/workflows/_terraform.yml
     with:
       environment: production
@@ -117,6 +131,12 @@ jobs:
 
   deploy-production:
     needs: [terraform-production, build-frontend, build-productcatalogservice, build-currencyservice]
+    if: >-
+      always() && !failure() && !cancelled() && (
+        github.event_name == 'push' ||
+        inputs.environment == 'production' ||
+        inputs.environment == 'all'
+      )
     uses: ./.github/workflows/_deploy-env.yml
     with:
       environment: production
