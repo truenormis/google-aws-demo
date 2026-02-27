@@ -12,10 +12,10 @@ resource "aws_acm_certificate" "main" {
 resource "cloudflare_record" "acm_validation" {
   for_each = {
     for dvo in aws_acm_certificate.main.domain_validation_options : dvo.domain_name => {
-      name  = dvo.resource_record_name
-      type  = dvo.resource_record_type
+      name    = dvo.resource_record_name
+      type    = dvo.resource_record_type
       content = dvo.resource_record_value
-    }
+    } if dvo.domain_name == local.cloudfront_domain
   }
 
   zone_id         = var.cloudflare_zone_id
@@ -48,7 +48,7 @@ resource "cloudflare_record" "origin_acm_validation" {
       name    = dvo.resource_record_name
       type    = dvo.resource_record_type
       content = dvo.resource_record_value
-    }
+    } if dvo.domain_name == local.origin_domain
   }
 
   zone_id         = var.cloudflare_zone_id
