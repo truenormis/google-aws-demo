@@ -4,10 +4,18 @@ locals {
     productcatalogservice = "${var.project_name}/productcatalogservice"
     currencyservice       = "${var.project_name}/currencyservice"
   }
+
+  # ECR repos are shared across environments; staging creates them, production reads them.
+  create_ecr = terraform.workspace == "staging"
+
+  ecr_urls = {
+    for key, name in local.ecr_repositories :
+    key => local.create_ecr ? aws_ecr_repository.app[key].repository_url : data.aws_ecr_repository.app[key].repository_url
+  }
 }
 
 resource "aws_ecr_repository" "app" {
-  for_each             = local.ecr_repositories
+  for_each             = local.create_ecr ? local.ecr_repositories : {}
   name                 = each.value
   image_tag_mutability = "MUTABLE"
   force_delete         = true
@@ -17,8 +25,13 @@ resource "aws_ecr_repository" "app" {
   }
 }
 
+data "aws_ecr_repository" "app" {
+  for_each = local.create_ecr ? {} : local.ecr_repositories
+  name     = each.value
+}
+
 resource "aws_ecr_lifecycle_policy" "app" {
-  for_each   = local.ecr_repositories
+  for_each   = local.create_ecr ? local.ecr_repositories : {}
   repository = aws_ecr_repository.app[each.key].name
 
   policy = jsonencode({

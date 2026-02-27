@@ -1,9 +1,8 @@
 # ACM certificate with DNS validation via Cloudflare
 
 resource "aws_acm_certificate" "main" {
-  domain_name               = var.domain_name
-  subject_alternative_names = ["staging.${var.domain_name}"]
-  validation_method         = "DNS"
+  domain_name       = local.cloudfront_domain
+  validation_method = "DNS"
 
   lifecycle {
     create_before_destroy = true
@@ -34,9 +33,8 @@ resource "aws_acm_certificate_validation" "main" {
 
 # ACM certificate for origin subdomains (used by ALB when behind CloudFront)
 resource "aws_acm_certificate" "origin" {
-  domain_name               = "origin.${var.domain_name}"
-  subject_alternative_names = ["origin-staging.${var.domain_name}"]
-  validation_method         = "DNS"
+  domain_name       = local.origin_domain
+  validation_method = "DNS"
 
   lifecycle {
     create_before_destroy = true

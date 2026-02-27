@@ -66,17 +66,17 @@ output "acm_certificate_arn" {
 
 output "ecr_frontend_url" {
   description = "ECR repository URL for frontend"
-  value       = aws_ecr_repository.app["frontend"].repository_url
+  value       = local.ecr_urls["frontend"]
 }
 
 output "ecr_productcatalogservice_url" {
   description = "ECR repository URL for productcatalogservice"
-  value       = aws_ecr_repository.app["productcatalogservice"].repository_url
+  value       = local.ecr_urls["productcatalogservice"]
 }
 
 output "ecr_currencyservice_url" {
   description = "ECR repository URL for currencyservice"
-  value       = aws_ecr_repository.app["currencyservice"].repository_url
+  value       = local.ecr_urls["currencyservice"]
 }
 
 output "amp_workspace_endpoint" {

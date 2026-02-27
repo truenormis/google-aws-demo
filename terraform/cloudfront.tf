@@ -17,9 +17,8 @@ resource "aws_acm_certificate" "cloudfront" {
   }
 }
 
-# Validation DNS records already exist via cloudflare_record.acm_validation (main cert
-# covers both shop.whiteforge.ai and staging.shop.whiteforge.ai). ACM validation
-# CNAMEs are identical per domain regardless of certificate or region, so we reuse them.
+# ACM validation CNAMEs are identical per domain regardless of certificate or region,
+# so we reuse the DNS records created for the main cert.
 resource "aws_acm_certificate_validation" "cloudfront" {
   provider                = aws.us_east_1
   certificate_arn         = aws_acm_certificate.cloudfront.arn
