@@ -18,12 +18,13 @@ resource "cloudflare_record" "acm_validation" {
     }
   }
 
-  zone_id = var.cloudflare_zone_id
-  name    = each.value.name
-  type    = each.value.type
-  content = trimsuffix(each.value.content, ".")
-  proxied = false
-  ttl     = 60
+  zone_id         = var.cloudflare_zone_id
+  name            = each.value.name
+  type            = each.value.type
+  content         = trimsuffix(each.value.content, ".")
+  proxied         = false
+  ttl             = 60
+  allow_overwrite = true
 }
 
 resource "aws_acm_certificate_validation" "main" {
@@ -50,12 +51,13 @@ resource "cloudflare_record" "origin_acm_validation" {
     }
   }
 
-  zone_id = var.cloudflare_zone_id
-  name    = each.value.name
-  type    = each.value.type
-  content = trimsuffix(each.value.content, ".")
-  proxied = false
-  ttl     = 60
+  zone_id         = var.cloudflare_zone_id
+  name            = each.value.name
+  type            = each.value.type
+  content         = trimsuffix(each.value.content, ".")
+  proxied         = false
+  ttl             = 60
+  allow_overwrite = true
 }
 
 resource "aws_acm_certificate_validation" "origin" {
